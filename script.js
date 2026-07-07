@@ -234,7 +234,7 @@ function analyzePrompt(prompt) {
   const title = titleFromPrompt(prompt);
   const confidence = seeded(`${seed}c`, 78, 94);
   const marketB = seeded(`${seed}m`, 8, 420) / 100;
-  const competitors = seeded(`${seed}co`, 6, 22);
+  const competitorCount = seeded(`${seed}co`, 6, 22);
   const signals = seeded(`${seed}s`, 10, 18);
   const months = seeded(`${seed}w`, 4, 14);
   const demandLevels = ["Moderate", "Strong", "Very Strong", "High"];
@@ -277,7 +277,7 @@ function analyzePrompt(prompt) {
     category,
     confidence,
     marketSize: formatMoney(marketB),
-    competitors,
+    competitorCount,
     signals,
     launchWindow: `${months} mo`,
     demand,
@@ -530,6 +530,22 @@ function signalItem(title, text) {
   return `<li><strong>${escapeHtml(title)}</strong><span>${escapeHtml(text)}</span></li>`;
 }
 
+function comparisonRows(value) {
+  if (!Array.isArray(value)) return [];
+  return value
+    .filter(row => Array.isArray(row) && row.length)
+    .map(row => row.map(cell => String(cell)));
+}
+
+function comparisonCount(data) {
+  const rows = comparisonRows(data.competitors);
+  return rows.length || data.competitorCount || 0;
+}
+
+function representativeAlternatives(data) {
+  return comparisonRows(data.competitors).slice(0, 3);
+}
+
 function buildReportHTML(data) {
   const findingsHtml = data.findings.map(([t, p]) => insightCard(t, p)).join("");
   const advantagesHtml = data.advantages.map(([t, p]) => signalItem(t, p)).join("");
@@ -542,26 +558,42 @@ function buildReportHTML(data) {
     `<div><span>${i + 1}</span><strong>${escapeHtml(t)}</strong><p>${escapeHtml(p)}</p></div>`
   ).join("");
   const sourcesHtml = data.sources.map(([t, p]) => insightCard(t, p)).join("");
-  const competitorsHtml = data.competitors.map(([a, b, c, d]) =>
+  const competitorRows = comparisonRows(data.competitors);
+  const competitorsHtml = competitorRows.map(([a, b, c, d]) =>
     `<tr><td>${escapeHtml(a)}</td><td>${escapeHtml(b)}</td><td>${escapeHtml(c)}</td><td>${escapeHtml(d)}</td></tr>`
   ).join("");
+  const competitorFallbackHtml = `<tr><td colspan="4">No structured comparison rows are available in this demo report.</td></tr>`;
+  const representativeHtml = representativeAlternatives(data).length
+    ? `<p>Representative alternatives include:</p>
+      <ul class="signal-list">
+        ${representativeAlternatives(data).map(([name, context]) => signalItem(name, context || "Review this alternative during source verification.")).join("")}
+      </ul>`
+    : "";
 
   return `
     <section class="report-hero" id="summary">
-      <p class="eyebrow"><span aria-hidden="true"></span> Consulting-grade report</p>
+      <p class="eyebrow"><span aria-hidden="true"></span> Professional report draft</p>
       <h1 id="reportMainTitle">${escapeHtml(data.title)}</h1>
       <p id="reportQuestion">Research question: "${escapeHtml(data.prompt)}"</p>
       <div class="report-stats">
         <div><strong>Demo</strong><span>Estimate type</span></div>
-        <div><strong>9</strong><span>Sections</span></div>
+        <div><strong>12</strong><span>Sections</span></div>
         <div><strong>${data.signals}</strong><span>Signals</span></div>
         <div><strong>${data.launchWindow}</strong><span>Execution window</span></div>
       </div>
     </section>
 
-    <section class="report-section">
-      <div class="section-title"><h2>Executive Summary</h2><span>Demo analysis</span></div>
-      <p>${data.executive}</p>
+    <section class="report-section executive-section" id="executive">
+      <div class="section-title">
+        <div>
+          <p class="section-kicker">Executive Summary</p>
+          <h2>What matters most</h2>
+        </div>
+        <span>Demo analysis</span>
+      </div>
+      <div class="executive-brief">
+        <p>${data.executive}</p>
+      </div>
       <div class="insight-grid">
         ${insightCard("Strategic thesis", data.thesis)}
         ${insightCard("Best customer", data.customer)}
@@ -570,12 +602,24 @@ function buildReportHTML(data) {
     </section>
 
     <section class="report-section" id="findings">
-      <div class="section-title"><h2>Key Findings</h2><span>Structured estimate</span></div>
+      <div class="section-title">
+        <div>
+          <p class="section-kicker">Key Findings</p>
+          <h2>Signals worth reviewing first</h2>
+        </div>
+        <span>Structured estimate</span>
+      </div>
       <div class="insight-grid">${findingsHtml}</div>
     </section>
 
     <section class="report-section" id="analysis">
-      <div class="section-title"><h2>Detailed Analysis</h2><span>Professional</span></div>
+      <div class="section-title">
+        <div>
+          <p class="section-kicker">Analysis</p>
+          <h2>Context and decision logic</h2>
+        </div>
+        <span>Prompt-based</span>
+      </div>
       <p>
         This analysis of <strong>${escapeHtml(data.topic)}</strong> evaluates market dynamics,
         competitive positioning, and execution feasibility. Scores below reflect estimated
@@ -584,74 +628,138 @@ function buildReportHTML(data) {
       <div class="chart-card">${barsHtml}</div>
     </section>
 
-    <section class="report-section split">
+    <section class="report-section split" id="tradeoffs">
       <div>
-        <div class="section-title"><h2>Advantages</h2></div>
+        <div class="section-title"><div><p class="section-kicker">Upside</p><h2>Advantages</h2></div></div>
         <ul class="signal-list positive">${advantagesHtml}</ul>
       </div>
       <div>
-        <div class="section-title"><h2>Disadvantages</h2></div>
+        <div class="section-title"><div><p class="section-kicker">Constraints</p><h2>Disadvantages</h2></div></div>
         <ul class="signal-list warning">${disadvantagesHtml}</ul>
       </div>
     </section>
 
     <section class="report-section" id="risks">
-      <div class="section-title"><h2>Risk Indicators</h2><span>Needs monitoring</span></div>
+      <div class="section-title">
+        <div>
+          <p class="section-kicker">Risks & Assumptions</p>
+          <h2>What could change the conclusion</h2>
+        </div>
+        <span>Needs review</span>
+      </div>
       <ul class="signal-list risk">${risksHtml}</ul>
     </section>
 
     <section class="report-section" id="market">
-      <div class="section-title"><h2>Market Analysis</h2><span>${escapeHtml(data.demand)} signal</span></div>
+      <div class="section-title">
+        <div>
+          <p class="section-kicker">Market Context</p>
+          <h2>Estimated opportunity shape</h2>
+        </div>
+        <span>${escapeHtml(data.demand)} signal</span>
+      </div>
       <p>
         Estimated total addressable market for <strong>${escapeHtml(data.topic)}</strong> is
-        approximately <strong>${data.marketSize}</strong>, with ${data.competitors} notable
+        approximately <strong>${data.marketSize}</strong>, with ${comparisonCount(data)} representative
         competitors identified. Demand appears <strong>${data.demand.toLowerCase()}</strong>
         based on category benchmarks and search intent patterns.
       </p>
+      ${representativeHtml}
       <div class="chart-card">${segmentHtml}</div>
     </section>
 
     <section class="report-section" id="competitors">
-      <div class="section-title"><h2>Competitor Comparison</h2><span>Opportunity mapped</span></div>
+      <div class="section-title">
+        <div>
+          <p class="section-kicker">Competitive Review</p>
+          <h2>Alternatives and positioning gaps</h2>
+        </div>
+        <span>Opportunity mapped</span>
+      </div>
       <div class="table-wrap">
         <table>
           <thead>
             <tr><th>Category</th><th>Current Experience</th><th>Weakness</th><th>Opportunity</th></tr>
           </thead>
-          <tbody>${competitorsHtml}</tbody>
+          <tbody>${competitorsHtml || competitorFallbackHtml}</tbody>
         </table>
       </div>
     </section>
 
     <section class="report-section" id="financial">
-      <div class="section-title"><h2>Financial Estimation</h2><span>Model estimate</span></div>
+      <div class="section-title">
+        <div>
+          <p class="section-kicker">Estimates</p>
+          <h2>Financial perspective</h2>
+        </div>
+        <span>Model estimate</span>
+      </div>
       <div class="insight-grid">${financialHtml}</div>
       <p class="report-disclaimer">Figures are illustrative estimates for demo purposes. Not financial advice.</p>
     </section>
 
     <section class="report-section" id="action">
-      <div class="section-title"><h2>Action Plan</h2><span>Next 90 days</span></div>
+      <div class="section-title">
+        <div>
+          <p class="section-kicker">Recommendations</p>
+          <h2>Prioritized next actions</h2>
+        </div>
+        <span>Next 90 days</span>
+      </div>
       <div class="timeline">${actionsHtml}</div>
     </section>
 
     <section class="report-section" id="sources">
-      <div class="section-title"><h2>Source Guidance</h2><span>Demo mode</span></div>
+      <div class="section-title">
+        <div>
+          <p class="section-kicker">Source Guidance</p>
+          <h2>Recommended evidence to verify</h2>
+        </div>
+        <span>Demo mode</span>
+      </div>
       <div class="insight-grid">${sourcesHtml}</div>
       <p class="report-disclaimer">This demo suggests source categories only. It does not fetch, verify, or cite live sources yet.</p>
+    </section>
+
+    <section class="report-section confidence-section" id="confidence">
+      <div class="section-title">
+        <div>
+          <p class="section-kicker">Confidence & Limitations</p>
+          <h2>How to interpret this draft</h2>
+        </div>
+        <span>Transparent limits</span>
+      </div>
+      <div class="confidence-grid">
+        <div>
+          <strong>Estimated in demo mode</strong>
+          <p>Market sizing, timing, financial ranges and signal strength are illustrative values generated from the prompt and template logic.</p>
+        </div>
+        <div>
+          <strong>Needs connected sources</strong>
+          <p>Live citations, current market data, official documents and primary research would make the final report stronger.</p>
+        </div>
+        <div>
+          <strong>Best used as a first draft</strong>
+          <p>Use this report to structure the decision, identify assumptions and decide what evidence to verify next.</p>
+        </div>
+      </div>
     </section>`;
 }
 
 function buildTreeNav() {
   const sections = [
-    ["summary", "Summary"],
+    ["summary", "Cover"],
+    ["executive", "Executive"],
     ["findings", "Findings"],
     ["analysis", "Analysis"],
+    ["tradeoffs", "Trade-offs"],
     ["risks", "Risks"],
     ["market", "Market"],
     ["competitors", "Competitors"],
     ["financial", "Financial"],
-    ["action", "Action Plan"],
-    ["sources", "Sources"]
+    ["action", "Recommendations"],
+    ["sources", "Sources"],
+    ["confidence", "Limitations"]
   ];
 
   els.treeNav.innerHTML = sections.map(([id, label], i) =>
@@ -677,7 +785,7 @@ function renderReport(data) {
   applyBarWidths(els.reportContent);
 
   els.reportTopTitle.textContent = data.title;
-  els.reportMeta.textContent = `Generated ${relativeTime(data.createdAt)} - 9 sections - demo estimates`;
+  els.reportMeta.textContent = `Generated ${relativeTime(data.createdAt)} - 12 sections - demo estimates`;
   els.metricConfidence.textContent = "Demo";
   els.metricDepth.textContent = "Professional";
 
@@ -762,7 +870,7 @@ function updatePreview(prompt) {
   els.previewScore.setAttribute("aria-label", `Demo estimate preview using ${data.confidence} percent decorative completeness`);
   els.previewScore.style.setProperty("--score-pct", `${data.confidence}%`);
   els.previewMarket.textContent = data.marketSize;
-  els.previewCompetitors.textContent = String(data.competitors);
+  els.previewCompetitors.textContent = String(comparisonCount(data));
   els.previewDemand.textContent = data.demand;
   els.previewWindow.textContent = data.launchWindow;
 }
@@ -789,7 +897,7 @@ function renderRecentReports() {
       <span>${escapeHtml(initials(report.title))}</span>
       <div>
         <strong>${escapeHtml(report.title)}</strong>
-        <p>${report.category} - 9 sections - ${relativeTime(report.createdAt)}${report.favorite ? " - *" : ""}</p>
+        <p>${report.category} - 12 sections - ${relativeTime(report.createdAt)}${report.favorite ? " - *" : ""}</p>
       </div>
       <em>Open</em>`;
     btn.addEventListener("click", () => {
