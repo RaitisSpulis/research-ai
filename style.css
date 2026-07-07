@@ -182,6 +182,10 @@ a {
   backdrop-filter: blur(4px);
 }
 
+.sidebar-backdrop[hidden] {
+  display: none !important;
+}
+
 .app {
   display: grid;
   grid-template-columns: 286px minmax(0, 1fr);
@@ -1718,8 +1722,17 @@ th {
   transition: opacity .28s var(--ease);
 }
 
+.panel-overlay[hidden] {
+  display: none !important;
+}
+
+.panel-overlay:not(.open) {
+  pointer-events: none;
+}
+
 .panel-overlay.open {
   opacity: 1;
+  pointer-events: auto;
 }
 
 .panel-drawer {

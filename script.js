@@ -199,6 +199,7 @@ function incrementUsage() {
 }
 
 function updateUsageUI() {
+  if (!els.usageText || !els.usageBar || !els.usageFill) return;
   const used = getUsage();
   els.usageText.textContent = `${used} of ${FREE_LIMIT} reports used this month`;
   els.usageBar.setAttribute("aria-valuenow", String(used));
@@ -1173,9 +1174,14 @@ function handleCollapseTree() {
 
 /* ── Event bindings ── */
 
+function logClick(name) {
+  console.log("[ResearchAI click]", name);
+}
+
 function bindEvents() {
   document.querySelectorAll("[data-view]").forEach(el => {
     el.addEventListener("click", e => {
+      logClick(`data-view: ${el.dataset.view}${el.id ? " #" + el.id : ""}`);
       e.preventDefault();
       if (el.id === "openReportBtn" && !getReports().length && !currentReport) {
         showToast("Generate a report first", "info");
@@ -1186,6 +1192,7 @@ function bindEvents() {
 
   document.querySelectorAll(".start-research").forEach(btn => {
     btn.addEventListener("click", () => {
+      logClick(`start-research: ${btn.textContent.trim().slice(0, 40)}`);
       showView("dashboard");
       setTimeout(() => {
         els.researchInput?.focus();
@@ -1195,6 +1202,7 @@ function bindEvents() {
   });
 
   on(els.researchForm, "submit", e => {
+    logClick("Generate Full Report");
     e.preventDefault();
     startResearch();
   });
@@ -1229,7 +1237,10 @@ function bindEvents() {
   });
 
   document.querySelectorAll("[data-panel]").forEach(btn => {
-    btn.addEventListener("click", () => openPanel(btn.dataset.panel));
+    btn.addEventListener("click", () => {
+      logClick(`data-panel: ${btn.dataset.panel}`);
+      openPanel(btn.dataset.panel);
+    });
   });
 
   document.querySelectorAll("[data-coming-soon]").forEach(btn => {
@@ -1244,26 +1255,66 @@ function bindEvents() {
     if (e.target === els.panelOverlay) closePanel();
   });
 
-  on(els.cancelLoading, "click", cancelLoading);
-  on(els.refreshTopics, "click", refreshTopics);
-  on(els.continueBtn, "click", handleContinueFromCard);
+  on(els.cancelLoading, "click", () => {
+    logClick("Cancel loading");
+    cancelLoading();
+  });
+  on(els.refreshTopics, "click", () => {
+    logClick("Refresh topics");
+    refreshTopics();
+  });
+  on(els.continueBtn, "click", () => {
+    logClick("Continue (card)");
+    handleContinueFromCard();
+  });
 
   on(els.startFreeBtn, "click", () => {
+    logClick("Start Free");
     showView("dashboard");
     els.researchInput?.focus();
     showToast("You're on the Free plan — 5 reports per month");
   });
 
-  on(els.copyReport, "click", copyReport);
-  on(els.shareReport, "click", shareReport);
-  on(els.exportPdf, "click", exportPdf);
-  on(els.exportDocx, "click", exportDocx);
-  on(els.exportMarkdown, "click", exportMarkdown);
-  on(els.continueResearch, "click", handleContinueFromReport);
-  on(els.favoriteReport, "click", toggleFavorite);
-  on(els.collapseTree, "click", handleCollapseTree);
-  on(els.mobileMenuBtn, "click", toggleSidebar);
-  on(els.sidebarBackdrop, "click", closeSidebar);
+  on(els.copyReport, "click", () => {
+    logClick("Copy report");
+    copyReport();
+  });
+  on(els.shareReport, "click", () => {
+    logClick("Share report");
+    shareReport();
+  });
+  on(els.exportPdf, "click", () => {
+    logClick("Export PDF");
+    exportPdf();
+  });
+  on(els.exportDocx, "click", () => {
+    logClick("Export DOCX");
+    exportDocx();
+  });
+  on(els.exportMarkdown, "click", () => {
+    logClick("Export Markdown");
+    exportMarkdown();
+  });
+  on(els.continueResearch, "click", () => {
+    logClick("Continue Research");
+    handleContinueFromReport();
+  });
+  on(els.favoriteReport, "click", () => {
+    logClick("Toggle favorite");
+    toggleFavorite();
+  });
+  on(els.collapseTree, "click", () => {
+    logClick("Collapse tree");
+    handleCollapseTree();
+  });
+  on(els.mobileMenuBtn, "click", () => {
+    logClick("Mobile menu");
+    toggleSidebar();
+  });
+  on(els.sidebarBackdrop, "click", () => {
+    logClick("Sidebar backdrop");
+    closeSidebar();
+  });
 
   document.addEventListener("keydown", e => {
     if ((e.metaKey || e.ctrlKey) && e.key === "k") {
@@ -1292,21 +1343,46 @@ function rotatePlaceholder() {
 /* ── Init ── */
 
 function init() {
-  if (els.researchInput) {
-    els.researchInput.placeholder = placeholders[0];
-  }
-  updateUsageUI();
-  renderRecentReports();
-  bindEvents();
-  buildTreeNav();
-  showReportContent(false);
-
-  const reports = getReports();
-  if (reports.length) {
-    currentReport = reports[0];
+  try {
+    if (els.researchInput) {
+      els.researchInput.placeholder = placeholders[0];
+    }
+  } catch (err) {
+    console.error("[ResearchAI] placeholder setup failed:", err);
   }
 
-  setInterval(rotatePlaceholder, 2800);
+  try {
+    updateUsageUI();
+  } catch (err) {
+    console.error("[ResearchAI] updateUsageUI failed:", err);
+  }
+
+  try {
+    renderRecentReports();
+  } catch (err) {
+    console.error("[ResearchAI] renderRecentReports failed:", err);
+  }
+
+  try {
+    bindEvents();
+  } catch (err) {
+    console.error("[ResearchAI] bindEvents failed:", err);
+  }
+
+  try {
+    buildTreeNav();
+    showReportContent(false);
+
+    const reports = getReports();
+    if (reports.length) {
+      currentReport = reports[0];
+    }
+
+    setInterval(rotatePlaceholder, 2800);
+    console.log("[ResearchAI] init complete — event listeners attached");
+  } catch (err) {
+    console.error("[ResearchAI] post-bind init failed:", err);
+  }
 }
 
 init();
