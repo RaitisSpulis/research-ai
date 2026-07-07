@@ -1,0 +1,465 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="ResearchAI transforms one research question into a consulting-grade report with executive summary, market analysis, competitor mapping, financial estimates, and action plans." />
+  <meta name="keywords" content="AI research, market analysis, business plan, startup validation, competitor research, investment thesis" />
+  <meta name="author" content="ResearchAI" />
+  <meta name="theme-color" content="#05070f" />
+  <meta name="robots" content="index, follow" />
+
+  <meta property="og:type" content="website" />
+  <meta property="og:title" content="ResearchAI — AI Research Platform" />
+  <meta property="og:description" content="Turn one question into an investor-ready research report. Executive summaries, market maps, risk analysis, and action plans — in minutes." />
+  <meta property="og:site_name" content="ResearchAI" />
+
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="ResearchAI — AI Research Platform" />
+  <meta name="twitter:description" content="Turn one question into an investor-ready research report." />
+
+  <title>ResearchAI — AI Research Platform</title>
+
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0%25' y1='0%25' x2='100%25' y2='100%25'%3E%3Cstop offset='0%25' stop-color='%238b5cf6'/%3E%3Cstop offset='100%25' stop-color='%2322d3ee'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='32' height='32' rx='8' fill='url(%23g)'/%3E%3Cpath d='M10 22L22 10M12 10h8v8' fill='none' stroke='white' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E" />
+
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+
+  <link rel="stylesheet" href="style.css" />
+
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "SoftwareApplication",
+    "name": "ResearchAI",
+    "applicationCategory": "BusinessApplication",
+    "operatingSystem": "Web",
+    "description": "AI research platform that transforms questions into professional consulting-grade reports.",
+    "offers": {
+      "@type": "Offer",
+      "price": "0",
+      "priceCurrency": "USD"
+    }
+  }
+  </script>
+</head>
+
+<body>
+  <a class="skip-link" href="#mainContent">Skip to main content</a>
+
+  <div class="background-noise" aria-hidden="true"></div>
+
+  <div class="mobile-header">
+    <button class="mobile-menu-btn" id="mobileMenuBtn" type="button" aria-label="Open navigation menu" aria-expanded="false" aria-controls="appSidebar">
+      <span aria-hidden="true"></span>
+      <span aria-hidden="true"></span>
+      <span aria-hidden="true"></span>
+    </button>
+    <a class="brand brand-compact" href="#" data-view="dashboard">
+      <span class="brand-mark" aria-hidden="true">
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M7 17L17 7M9 7h8v8" />
+        </svg>
+      </span>
+      <span>ResearchAI</span>
+    </a>
+  </div>
+
+  <div class="sidebar-backdrop" id="sidebarBackdrop" hidden aria-hidden="true"></div>
+
+  <main class="app" id="mainContent">
+    <aside class="app-sidebar" id="appSidebar" aria-label="Main navigation">
+      <a class="brand" href="#" data-view="dashboard">
+        <span class="brand-mark" aria-hidden="true">
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M7 17L17 7M9 7h8v8" />
+          </svg>
+        </span>
+        <span>ResearchAI</span>
+      </a>
+
+      <button class="primary-create start-research" type="button">
+        <span>New Research</span>
+        <kbd aria-hidden="true">⌘K</kbd>
+      </button>
+
+      <nav class="sidebar-section" aria-label="Workspace">
+        <p class="sidebar-label">Workspace</p>
+        <button class="sidebar-item active" type="button" data-view="dashboard">
+          <span class="sidebar-icon" aria-hidden="true">⌂</span>
+          <span>Dashboard</span>
+        </button>
+        <button class="sidebar-item" type="button" data-view="report" id="latestReportNav">
+          <span class="sidebar-icon" aria-hidden="true">▤</span>
+          <span>Latest Report</span>
+        </button>
+        <button class="sidebar-item" type="button" data-panel="templates">
+          <span class="sidebar-icon" aria-hidden="true">✦</span>
+          <span>Templates</span>
+        </button>
+        <button class="sidebar-item coming-soon-item" type="button" data-coming-soon="Collections">
+          <span class="sidebar-icon" aria-hidden="true">◇</span>
+          <span>Collections</span>
+          <span class="badge-soon">Soon</span>
+        </button>
+      </nav>
+
+      <nav class="sidebar-section" aria-label="Library">
+        <p class="sidebar-label">Library</p>
+        <button class="sidebar-item" type="button" data-panel="history">
+          <span class="sidebar-icon" aria-hidden="true">◷</span>
+          <span>History</span>
+        </button>
+        <button class="sidebar-item" type="button" data-panel="favorites">
+          <span class="sidebar-icon" aria-hidden="true">★</span>
+          <span>Favorites</span>
+        </button>
+        <button class="sidebar-item coming-soon-item" type="button" data-coming-soon="Source Library">
+          <span class="sidebar-icon" aria-hidden="true">#</span>
+          <span>Sources</span>
+          <span class="badge-soon">Soon</span>
+        </button>
+        <button class="sidebar-item" type="button" data-panel="settings">
+          <span class="sidebar-icon" aria-hidden="true">⚙</span>
+          <span>Settings</span>
+        </button>
+      </nav>
+
+      <section class="usage-card" aria-label="Usage">
+        <div>
+          <strong>Free Workspace</strong>
+          <p id="usageText">0 of 5 reports used this month</p>
+        </div>
+        <div class="usage-bar" role="progressbar" aria-valuemin="0" aria-valuemax="5" aria-valuenow="0" id="usageBar" aria-label="Reports used this month">
+          <span id="usageFill"></span>
+        </div>
+      </section>
+    </aside>
+
+    <section class="view active" id="dashboardView" aria-label="Dashboard">
+      <header class="topbar">
+        <div>
+          <p class="eyebrow"><span aria-hidden="true"></span> AI Research Platform</p>
+          <h1>Turn questions into investor-ready research.</h1>
+        </div>
+
+        <div class="topbar-actions">
+          <button class="ghost-btn" type="button" data-view="report" id="openReportBtn">Open Report</button>
+          <button class="accent-btn start-research" type="button">Create Report</button>
+        </div>
+      </header>
+
+      <section class="hero-panel">
+        <div class="hero-content">
+          <div class="hero-badge">Not a chatbot. A professional research engine.</div>
+          <h2>One question in. A consulting-grade report out.</h2>
+          <p>
+            ResearchAI transforms ideas into executive summaries, market maps,
+            risk analysis, competitor tables, financial estimates and action plans.
+          </p>
+
+          <form class="research-command" id="researchForm" novalidate>
+            <div class="input-group">
+              <label class="input-shell" for="researchInput">
+                <span class="input-icon" aria-hidden="true">⌕</span>
+                <input
+                  id="researchInput"
+                  name="research"
+                  type="text"
+                  autocomplete="off"
+                  spellcheck="true"
+                  maxlength="500"
+                  aria-describedby="inputError inputHint"
+                  required
+                />
+              </label>
+              <p class="input-hint" id="inputHint">Press Enter or click Generate. Demo mode — reports are generated locally.</p>
+              <p class="input-error" id="inputError" role="alert" hidden></p>
+            </div>
+            <button class="accent-btn large" type="submit" id="generateBtn">
+              <span class="btn-label">Generate Full Report</span>
+              <span class="btn-spinner" aria-hidden="true"></span>
+            </button>
+          </form>
+
+          <div class="suggestions" id="suggestions" aria-label="Suggested research prompts">
+            <button type="button">Validate a startup idea</button>
+            <button type="button">Create a business plan</button>
+            <button type="button">Analyze competitors</button>
+            <button type="button">Estimate market size</button>
+            <button type="button">Build investment thesis</button>
+          </div>
+        </div>
+
+        <div class="report-preview" aria-label="Live report preview" aria-live="polite">
+          <div class="preview-header">
+            <div>
+              <strong id="previewTitle">Your Research Topic</strong>
+              <span id="previewMeta">Research report · 9 sections</span>
+            </div>
+            <div class="score-ring" id="previewScore" aria-label="Estimated confidence 82 percent">82%</div>
+          </div>
+
+          <div class="preview-lines" aria-hidden="true">
+            <span></span>
+            <span></span>
+            <span></span>
+            <span></span>
+          </div>
+
+          <div class="preview-grid" id="previewGrid">
+            <div><strong id="previewMarket">$2.4B</strong><span>Market potential</span></div>
+            <div><strong id="previewCompetitors">12</strong><span>Competitors</span></div>
+            <div><strong id="previewDemand">Strong</strong><span>Demand signal</span></div>
+            <div><strong id="previewWindow">9 mo</strong><span>Launch window</span></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="section-block">
+        <div class="section-header">
+          <div>
+            <p class="eyebrow"><span aria-hidden="true"></span> Quick Start</p>
+            <h2>Start with a proven research workflow.</h2>
+          </div>
+          <p>Choose a professional template and generate a complete report instantly.</p>
+        </div>
+
+        <div class="template-grid">
+          <button class="template-card" type="button" data-prompt="Create a professional business plan for opening a premium coffee shop in a major city">
+            <span aria-hidden="true">☕</span>
+            <strong>Open Coffee Shop</strong>
+            <p>Costs, demand, competitors, launch plan and financial assumptions.</p>
+          </button>
+
+          <button class="template-card" type="button" data-prompt="Create a detailed business plan for a new B2B SaaS startup in the productivity space">
+            <span aria-hidden="true">▣</span>
+            <strong>Create Business Plan</strong>
+            <p>Strategy, pricing, go-to-market, risks and revenue model.</p>
+          </button>
+
+          <button class="template-card" type="button" data-prompt="Research whether buying an apartment is a good financial decision compared to renting">
+            <span aria-hidden="true">⌂</span>
+            <strong>Buy Apartment</strong>
+            <p>Financial comparison, risks, negotiation and decision framework.</p>
+          </button>
+
+          <button class="template-card" type="button" data-prompt="Create a professional learning roadmap to learn AI and build AI products">
+            <span aria-hidden="true">AI</span>
+            <strong>Learn AI</strong>
+            <p>Skills, resources, projects, milestones and execution plan.</p>
+          </button>
+
+          <button class="template-card" type="button" data-prompt="Analyze the market opportunity for a new mobile health and wellness app">
+            <span aria-hidden="true">◈</span>
+            <strong>Market Analysis</strong>
+            <p>Segments, trends, competitors, demand and positioning.</p>
+          </button>
+
+          <button class="template-card" type="button" data-prompt="Create an investment research report for a leading technology company">
+            <span aria-hidden="true">$</span>
+            <strong>Investment Research</strong>
+            <p>Thesis, catalysts, risks, financial logic and valuation overview.</p>
+          </button>
+        </div>
+      </section>
+
+      <section class="dashboard-grid">
+        <article class="panel-card">
+          <div class="panel-title">
+            <h3>Recent Reports</h3>
+            <button class="text-btn" type="button" data-panel="history">View all</button>
+          </div>
+
+          <div class="report-list" id="recentReportsList">
+            <div class="empty-state compact" id="recentEmpty">
+              <p>No reports yet</p>
+              <span>Generate your first research report to see it here.</span>
+            </div>
+          </div>
+        </article>
+
+        <article class="panel-card">
+          <div class="panel-title">
+            <h3>Recommended Topics</h3>
+            <button class="text-btn" type="button" id="refreshTopics">Refresh</button>
+          </div>
+
+          <div class="topic-cloud" id="topicCloud" aria-label="Recommended research topics">
+            <button type="button">Startup Validation</button>
+            <button type="button">Business Plans</button>
+            <button type="button">Market Sizing</button>
+            <button type="button">Competitor Research</button>
+            <button type="button">Investment Thesis</button>
+            <button type="button">Product Strategy</button>
+            <button type="button">Real Estate</button>
+            <button type="button">Travel Planning</button>
+          </div>
+
+          <div class="continue-card" id="continueCard" hidden>
+            <strong>Continue previous research</strong>
+            <p id="continueText">Resume with deeper pricing, competitors and source analysis.</p>
+            <button class="accent-btn" type="button" id="continueBtn">Continue</button>
+          </div>
+        </article>
+      </section>
+
+      <section class="section-block">
+        <div class="section-header">
+          <div>
+            <p class="eyebrow"><span aria-hidden="true"></span> Pricing</p>
+            <h2>Built for people who make decisions.</h2>
+          </div>
+          <p>Start free. Upgrade when ResearchAI becomes your weekly research engine.</p>
+        </div>
+
+        <div class="pricing-grid">
+          <article class="pricing-card">
+            <h3>Free</h3>
+            <p>For testing research workflows.</p>
+            <strong>$0 <span>/mo</span></strong>
+            <ul>
+              <li>5 reports per month</li>
+              <li>Full report structure</li>
+              <li>Copy &amp; Markdown export</li>
+            </ul>
+            <button class="ghost-btn" type="button" id="startFreeBtn">Start Free</button>
+          </article>
+
+          <article class="pricing-card featured">
+            <h3>Pro</h3>
+            <p>For founders, analysts and operators.</p>
+            <strong>$29 <span>/mo</span></strong>
+            <ul>
+              <li>Unlimited reports</li>
+              <li>PDF, DOCX and Markdown</li>
+              <li>Saved templates</li>
+              <li>Competitor analysis</li>
+            </ul>
+            <button class="accent-btn coming-soon-btn" type="button" data-coming-soon="Pro subscription">Upgrade to Pro</button>
+          </article>
+
+          <article class="pricing-card">
+            <h3>Business</h3>
+            <p>For teams and agencies.</p>
+            <strong>$99 <span>/mo</span></strong>
+            <ul>
+              <li>Team workspace</li>
+              <li>Shared collections</li>
+              <li>Branded exports</li>
+              <li>Priority workflows</li>
+            </ul>
+            <button class="ghost-btn coming-soon-btn" type="button" data-coming-soon="Business plans">Contact Sales</button>
+          </article>
+        </div>
+      </section>
+
+      <footer class="site-footer">
+        <p>ResearchAI · Public Beta · Demo reports generated locally in your browser</p>
+        <nav aria-label="Footer">
+          <button type="button" data-panel="settings">Settings</button>
+          <button type="button" data-coming-soon="Documentation">Docs</button>
+          <button type="button" data-coming-soon="Privacy Policy">Privacy</button>
+        </nav>
+      </footer>
+    </section>
+
+    <section class="view loading-view" id="loadingView" aria-label="Generating report" aria-live="polite">
+      <div class="loading-shell">
+        <div class="loading-main">
+          <div class="research-orb" aria-hidden="true"></div>
+          <h2>Creating your professional report</h2>
+          <p id="loadingPrompt">ResearchAI is transforming your question into a complete consulting-grade research report.</p>
+
+          <div class="progress-meta">
+            <span id="progressLabel">Searching sources...</span>
+            <strong id="progressValue">0%</strong>
+          </div>
+          <div class="progress-track" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" id="progressTrack">
+            <span id="progressBar"></span>
+          </div>
+
+          <button class="ghost-btn loading-cancel" type="button" id="cancelLoading">Cancel</button>
+        </div>
+
+        <aside class="loading-steps" id="loadingSteps" aria-label="Research progress steps">
+          <div class="loading-step active"><span aria-hidden="true">1</span>Searching sources</div>
+          <div class="loading-step"><span aria-hidden="true">2</span>Reading sources</div>
+          <div class="loading-step"><span aria-hidden="true">3</span>Thinking</div>
+          <div class="loading-step"><span aria-hidden="true">4</span>Comparing information</div>
+          <div class="loading-step"><span aria-hidden="true">5</span>Building report</div>
+          <div class="loading-step"><span aria-hidden="true">6</span>Checking reliability</div>
+          <div class="loading-step"><span aria-hidden="true">7</span>Writing conclusions</div>
+          <div class="loading-step"><span aria-hidden="true">8</span>Creating visual report</div>
+        </aside>
+      </div>
+    </section>
+
+    <section class="view report-view" id="reportView" aria-label="Research report">
+      <header class="report-topbar">
+        <div>
+          <button class="back-btn" type="button" data-view="dashboard" aria-label="Back to dashboard">←</button>
+          <div>
+            <h2 id="reportTopTitle">Professional Research Report</h2>
+            <p id="reportMeta">Generated just now · 9 sections · 82% confidence</p>
+          </div>
+        </div>
+
+        <div class="export-actions">
+          <button class="ghost-btn" type="button" id="exportPdf" aria-label="Export as PDF">PDF</button>
+          <button class="ghost-btn" type="button" id="exportDocx" aria-label="Export as DOCX">DOCX</button>
+          <button class="ghost-btn" type="button" id="exportMarkdown" aria-label="Export as Markdown">Markdown</button>
+          <button class="ghost-btn" type="button" id="copyReport" aria-label="Copy report to clipboard">Copy</button>
+          <button class="ghost-btn" type="button" id="shareReport" aria-label="Share report">Share</button>
+          <button class="ghost-btn" type="button" id="favoriteReport" aria-label="Add to favorites">☆ Favorite</button>
+          <button class="accent-btn" type="button" id="continueResearch">Continue</button>
+        </div>
+      </header>
+
+      <div class="report-empty" id="reportEmpty" hidden>
+        <div class="empty-state">
+          <div class="empty-icon" aria-hidden="true">▤</div>
+          <h2>No report yet</h2>
+          <p>Generate a research report from the dashboard to view a full consulting-grade deliverable.</p>
+          <button class="accent-btn start-research" type="button">Create Your First Report</button>
+        </div>
+      </div>
+
+      <div class="report-layout" id="reportLayout">
+        <aside class="research-tree" id="researchTree" aria-label="Report sections">
+          <div class="tree-head">
+            <h3>Research Tree</h3>
+            <button type="button" id="collapseTree" aria-label="Collapse research tree">‹</button>
+          </div>
+
+          <nav id="treeNav"></nav>
+
+          <div class="tree-metrics" id="treeMetrics">
+            <strong>Report Health</strong>
+            <p><span>Depth</span><b id="metricDepth">Professional</b></p>
+            <p><span>Confidence</span><b id="metricConfidence">82%</b></p>
+            <p><span>Export Ready</span><b>Yes</b></p>
+          </div>
+        </aside>
+
+        <article class="report-document" id="reportContent"></article>
+      </div>
+    </section>
+  </main>
+
+  <div class="panel-overlay" id="panelOverlay" hidden>
+    <div class="panel-drawer" role="dialog" aria-modal="true" aria-labelledby="panelTitle">
+      <header class="panel-header">
+        <h2 id="panelTitle">Panel</h2>
+        <button class="panel-close" type="button" id="panelClose" aria-label="Close panel">×</button>
+      </header>
+      <div class="panel-body" id="panelBody"></div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast" role="status" aria-live="polite" aria-atomic="true"></div>
+
+  <script src="script.js"></script>
+</body>
+</html>
