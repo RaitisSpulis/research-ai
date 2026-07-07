@@ -4,6 +4,21 @@ const STORAGE_KEY = "researchai_reports_v1";
 const USAGE_KEY = "researchai_usage_v1";
 const FREE_LIMIT = 5;
 
+const researchAIConfig = {
+  generationMode: "demo",
+  providers: {
+    demo: {},
+    gemini: {
+      // TODO: Add Gemini model and endpoint configuration when backend/API support exists.
+      apiKey: null
+    },
+    openrouter: {
+      // TODO: Add OpenRouter model and endpoint configuration when backend/API support exists.
+      apiKey: null
+    }
+  }
+};
+
 const views = {
   dashboard: document.getElementById("dashboardView"),
   loading: document.getElementById("loadingView"),
@@ -346,6 +361,139 @@ function analyzePrompt(prompt) {
     ...categoryContent,
     ...dynamicContent
   };
+}
+
+/* -- AI service layer -- */
+
+class GenerationError extends Error {
+  constructor(code, message) {
+    super(message);
+    this.name = "GenerationError";
+    this.code = code;
+  }
+}
+
+const generationErrorMessages = {
+  provider_unavailable: "This report provider is not available yet. Demo Mode is still available.",
+  invalid_configuration: "Report generation is not configured correctly. Please switch back to Demo Mode.",
+  generation_failed: "ResearchAI could not generate the report. Please try again."
+};
+
+class ReportProvider {
+  constructor(config = {}) {
+    this.config = config;
+  }
+
+  generateReport() {
+    throw new GenerationError("provider_unavailable", "Provider has not implemented report generation.");
+  }
+
+  createPreview() {
+    throw new GenerationError("provider_unavailable", "Provider has not implemented preview generation.");
+  }
+}
+
+class DemoProvider extends ReportProvider {
+  async generateReport(prompt) {
+    return analyzePrompt(prompt);
+  }
+
+  createPreview(prompt) {
+    return analyzePrompt(prompt);
+  }
+}
+
+class GeminiProvider extends ReportProvider {
+  async generateReport() {
+    // TODO: Implement Gemini generation through a backend/API boundary. Do not expose API keys in this frontend.
+    throw new GenerationError("provider_unavailable", "GeminiProvider is a placeholder.");
+  }
+
+  createPreview(prompt) {
+    return analyzePrompt(prompt);
+  }
+}
+
+class OpenRouterProvider extends ReportProvider {
+  async generateReport() {
+    // TODO: Implement OpenRouter generation through a backend/API boundary. Do not expose API keys in this frontend.
+    throw new GenerationError("provider_unavailable", "OpenRouterProvider is a placeholder.");
+  }
+
+  createPreview(prompt) {
+    return analyzePrompt(prompt);
+  }
+}
+
+class AIService {
+  constructor(config) {
+    this.config = config;
+    this.providers = {
+      demo: new DemoProvider(config.providers.demo),
+      gemini: new GeminiProvider(config.providers.gemini),
+      openrouter: new OpenRouterProvider(config.providers.openrouter)
+    };
+  }
+
+  getProvider() {
+    const mode = this.config.generationMode;
+    const provider = this.providers[mode];
+    if (!provider) {
+      throw new GenerationError("invalid_configuration", `Unknown generation mode: ${mode}`);
+    }
+    return provider;
+  }
+
+  async generateReport(prompt) {
+    try {
+      return await this.getProvider().generateReport(prompt);
+    } catch (err) {
+      if (err instanceof GenerationError) throw err;
+      throw new GenerationError("generation_failed", err.message);
+    }
+  }
+
+  createPreview(prompt) {
+    try {
+      return this.getProvider().createPreview(prompt);
+    } catch {
+      return new DemoProvider(this.config.providers.demo).createPreview(prompt);
+    }
+  }
+}
+
+class ReportController {
+  constructor(aiService) {
+    this.aiService = aiService;
+  }
+
+  createPreview(prompt) {
+    return this.aiService.createPreview(prompt);
+  }
+
+  async generateReport(prompt) {
+    return await this.aiService.generateReport(prompt);
+  }
+
+  async generateAndSaveReport(prompt) {
+    return saveReport(await this.generateReport(prompt));
+  }
+}
+
+const aiService = new AIService(researchAIConfig);
+const reportController = new ReportController(aiService);
+
+function getGenerationErrorMessage(error) {
+  if (error instanceof GenerationError && generationErrorMessages[error.code]) {
+    return generationErrorMessages[error.code];
+  }
+  return generationErrorMessages.generation_failed;
+}
+
+function handleGenerationError(error) {
+  console.error("[ResearchAI] report generation failed:", error);
+  showToast(getGenerationErrorMessage(error), "warn");
+  showView("dashboard");
 }
 
 function getCategoryContent(category, topic, seed) {
@@ -1540,7 +1688,7 @@ function updatePreview(prompt) {
     return;
   }
 
-  const data = analyzePrompt(prompt);
+  const data = reportController.createPreview(prompt);
   els.previewTitle.textContent = data.title;
   els.previewScore.textContent = "Demo";
   els.previewScore.setAttribute("aria-label", `Demo estimate preview using ${data.confidence} percent decorative completeness`);
@@ -1734,13 +1882,16 @@ function startResearch() {
         step.classList.add("done");
       });
 
-      setTimeout(() => {
-        incrementUsage();
-        const analyzed = analyzePrompt(currentPrompt);
-        const saved = saveReport(analyzed);
-        renderReport(saved);
-        showView("report");
-        showToast("Report generated successfully");
+      setTimeout(async () => {
+        try {
+          const saved = await reportController.generateAndSaveReport(currentPrompt);
+          incrementUsage();
+          renderReport(saved);
+          showView("report");
+          showToast("Report generated successfully");
+        } catch (err) {
+          handleGenerationError(err);
+        }
       }, 600);
     }
   }, 380);
