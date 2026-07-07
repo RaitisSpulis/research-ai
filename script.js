@@ -14,7 +14,6 @@ const els = {
   researchInput: document.getElementById("researchInput"),
   researchForm: document.getElementById("researchForm"),
   inputError: document.getElementById("inputError"),
-  generateBtn: document.getElementById("generateBtn"),
   loadingPrompt: document.getElementById("loadingPrompt"),
   progressBar: document.getElementById("progressBar"),
   progressValue: document.getElementById("progressValue"),
@@ -25,7 +24,6 @@ const els = {
   reportContent: document.getElementById("reportContent"),
   reportEmpty: document.getElementById("reportEmpty"),
   reportLayout: document.getElementById("reportLayout"),
-  reportMainTitle: null,
   reportTopTitle: document.getElementById("reportTopTitle"),
   reportMeta: document.getElementById("reportMeta"),
   treeNav: document.getElementById("treeNav"),
@@ -270,7 +268,7 @@ function analyzePrompt(prompt) {
     ["Early adopters", seeded(`${seed}p4`, 70, 92)]
   ];
 
-  const categoryContent = getCategoryContent(category, topic, prompt, seed);
+  const categoryContent = getCategoryContent(category, topic, seed);
 
   return {
     prompt,
@@ -279,7 +277,6 @@ function analyzePrompt(prompt) {
     category,
     confidence,
     marketSize: formatMoney(marketB),
-    marketRaw: marketB,
     competitors,
     signals,
     launchWindow: `${months} mo`,
@@ -290,7 +287,7 @@ function analyzePrompt(prompt) {
   };
 }
 
-function getCategoryContent(category, topic, prompt, seed) {
+function getCategoryContent(category, topic, seed) {
   const templates = {
     startup: {
       executive: `Based on analysis of <strong>${escapeHtml(topic)}</strong>, the opportunity shows meaningful potential in a growing market. Early signals suggest strong demand from professionals seeking structured intelligence over generic AI chat. Success depends on clear positioning, credible sourcing, and a workflow that delivers finished deliverables — not open-ended conversations.`,
@@ -519,7 +516,7 @@ function insightCard(title, text) {
   return `<div><strong>${escapeHtml(title)}</strong><p>${text}</p></div>`;
 }
 
-function signalItem(title, text, type) {
+function signalItem(title, text) {
   return `<li><strong>${escapeHtml(title)}</strong><span>${escapeHtml(text)}</span></li>`;
 }
 
@@ -667,7 +664,6 @@ function applyBarWidths(container) {
 function renderReport(data) {
   currentReport = data;
   els.reportContent.innerHTML = buildReportHTML(data);
-  els.reportMainTitle = document.getElementById("reportMainTitle");
   applyBarWidths(els.reportContent);
 
   els.reportTopTitle.textContent = data.title;
@@ -1174,14 +1170,9 @@ function handleCollapseTree() {
 
 /* ── Event bindings ── */
 
-function logClick(name) {
-  console.log("[ResearchAI click]", name);
-}
-
 function bindEvents() {
   document.querySelectorAll("[data-view]").forEach(el => {
     el.addEventListener("click", e => {
-      logClick(`data-view: ${el.dataset.view}${el.id ? " #" + el.id : ""}`);
       e.preventDefault();
       if (el.id === "openReportBtn" && !getReports().length && !currentReport) {
         showToast("Generate a report first", "info");
@@ -1192,7 +1183,6 @@ function bindEvents() {
 
   document.querySelectorAll(".start-research").forEach(btn => {
     btn.addEventListener("click", () => {
-      logClick(`start-research: ${btn.textContent.trim().slice(0, 40)}`);
       showView("dashboard");
       setTimeout(() => {
         els.researchInput?.focus();
@@ -1202,7 +1192,6 @@ function bindEvents() {
   });
 
   on(els.researchForm, "submit", e => {
-    logClick("Generate Full Report");
     e.preventDefault();
     startResearch();
   });
@@ -1237,10 +1226,7 @@ function bindEvents() {
   });
 
   document.querySelectorAll("[data-panel]").forEach(btn => {
-    btn.addEventListener("click", () => {
-      logClick(`data-panel: ${btn.dataset.panel}`);
-      openPanel(btn.dataset.panel);
-    });
+    btn.addEventListener("click", () => openPanel(btn.dataset.panel));
   });
 
   document.querySelectorAll("[data-coming-soon]").forEach(btn => {
@@ -1255,66 +1241,26 @@ function bindEvents() {
     if (e.target === els.panelOverlay) closePanel();
   });
 
-  on(els.cancelLoading, "click", () => {
-    logClick("Cancel loading");
-    cancelLoading();
-  });
-  on(els.refreshTopics, "click", () => {
-    logClick("Refresh topics");
-    refreshTopics();
-  });
-  on(els.continueBtn, "click", () => {
-    logClick("Continue (card)");
-    handleContinueFromCard();
-  });
+  on(els.cancelLoading, "click", cancelLoading);
+  on(els.refreshTopics, "click", refreshTopics);
+  on(els.continueBtn, "click", handleContinueFromCard);
 
   on(els.startFreeBtn, "click", () => {
-    logClick("Start Free");
     showView("dashboard");
     els.researchInput?.focus();
     showToast("You're on the Free plan — 5 reports per month");
   });
 
-  on(els.copyReport, "click", () => {
-    logClick("Copy report");
-    copyReport();
-  });
-  on(els.shareReport, "click", () => {
-    logClick("Share report");
-    shareReport();
-  });
-  on(els.exportPdf, "click", () => {
-    logClick("Export PDF");
-    exportPdf();
-  });
-  on(els.exportDocx, "click", () => {
-    logClick("Export DOCX");
-    exportDocx();
-  });
-  on(els.exportMarkdown, "click", () => {
-    logClick("Export Markdown");
-    exportMarkdown();
-  });
-  on(els.continueResearch, "click", () => {
-    logClick("Continue Research");
-    handleContinueFromReport();
-  });
-  on(els.favoriteReport, "click", () => {
-    logClick("Toggle favorite");
-    toggleFavorite();
-  });
-  on(els.collapseTree, "click", () => {
-    logClick("Collapse tree");
-    handleCollapseTree();
-  });
-  on(els.mobileMenuBtn, "click", () => {
-    logClick("Mobile menu");
-    toggleSidebar();
-  });
-  on(els.sidebarBackdrop, "click", () => {
-    logClick("Sidebar backdrop");
-    closeSidebar();
-  });
+  on(els.copyReport, "click", copyReport);
+  on(els.shareReport, "click", shareReport);
+  on(els.exportPdf, "click", exportPdf);
+  on(els.exportDocx, "click", exportDocx);
+  on(els.exportMarkdown, "click", exportMarkdown);
+  on(els.continueResearch, "click", handleContinueFromReport);
+  on(els.favoriteReport, "click", toggleFavorite);
+  on(els.collapseTree, "click", handleCollapseTree);
+  on(els.mobileMenuBtn, "click", toggleSidebar);
+  on(els.sidebarBackdrop, "click", closeSidebar);
 
   document.addEventListener("keydown", e => {
     if ((e.metaKey || e.ctrlKey) && e.key === "k") {
@@ -1379,7 +1325,6 @@ function init() {
     }
 
     setInterval(rotatePlaceholder, 2800);
-    console.log("[ResearchAI] init complete — event listeners attached");
   } catch (err) {
     console.error("[ResearchAI] post-bind init failed:", err);
   }

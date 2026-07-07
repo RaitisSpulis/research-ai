@@ -1936,7 +1936,6 @@ th {
     transform: translateX(0);
   }
 
-  .app-sidebar.open + .sidebar-backdrop,
   .sidebar-backdrop:not([hidden]) {
     display: block;
   }
