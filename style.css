@@ -993,6 +993,11 @@ a {
   width: 100%;
 }
 
+.report-row.pinned {
+  border-color: rgba(251, 191, 36, .24);
+  background: rgba(251, 191, 36, .055);
+}
+
 .report-row:hover {
   transform: translateX(3px);
   background: rgba(255,255,255,.075);
@@ -1022,10 +1027,31 @@ a {
   font-size: 12px;
 }
 
-.report-row em {
+.report-row-actions,
+.history-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  justify-content: flex-end;
+}
+
+.report-row-actions button,
+.history-actions button {
+  min-height: 30px;
+  padding: 0 9px;
+  border-radius: 999px;
   color: var(--muted);
-  font-style: normal;
-  font-size: 13px;
+  background: rgba(255,255,255,.06);
+  border: 1px solid rgba(255,255,255,.09);
+  font-size: 12px;
+  transition: .22s var(--ease);
+}
+
+.report-row-actions button:hover,
+.history-actions button:hover {
+  color: white;
+  background: rgba(255,255,255,.1);
+  border-color: rgba(255,255,255,.16);
 }
 
 .topic-cloud {
@@ -1969,7 +1995,7 @@ th {
 .history-item {
   width: 100%;
   display: grid;
-  grid-template-columns: auto 1fr;
+  grid-template-columns: auto 1fr auto;
   gap: 12px;
   padding: 14px;
   border-radius: 18px;
@@ -2244,6 +2270,18 @@ th {
     min-height: 38px;
     padding: 0 12px;
     font-size: 13px;
+  }
+
+  .report-row,
+  .history-item {
+    grid-template-columns: auto 1fr;
+    align-items: start;
+  }
+
+  .report-row-actions,
+  .history-actions {
+    grid-column: 1 / -1;
+    justify-content: flex-start;
   }
 
   .report-stats {

@@ -165,14 +165,35 @@ function escapeHtml(text) {
 function getReports() {
   try {
     const data = JSON.parse(localStorage.getItem(STORAGE_KEY));
-    return Array.isArray(data) ? data : [];
+    return Array.isArray(data) ? sortReports(data.map(normalizeReport)) : [];
   } catch {
     return [];
   }
 }
 
 function saveReports(reports) {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(reports.slice(0, 50)));
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(sortReports(reports.map(normalizeReport)).slice(0, 50)));
+}
+
+function normalizeReport(report) {
+  return {
+    ...report,
+    id: report.id || hashCode(`${report.prompt || report.title || "report"}${report.createdAt || Date.now()}`),
+    title: report.title || titleFromPrompt(report.prompt || "Professional Research Report"),
+    prompt: report.prompt || "",
+    reportType: report.reportType || report.intent || report.category || "general_research",
+    createdAt: report.createdAt || new Date().toISOString(),
+    contentHtml: report.contentHtml || "",
+    pinned: Boolean(report.pinned || report.favorite),
+    favorite: Boolean(report.pinned || report.favorite)
+  };
+}
+
+function sortReports(reports) {
+  return [...reports].sort((a, b) => {
+    if (Boolean(a.pinned) !== Boolean(b.pinned)) return a.pinned ? -1 : 1;
+    return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+  });
 }
 
 function getUsage() {
@@ -208,21 +229,55 @@ function updateUsageUI() {
 
 function detectCategory(prompt) {
   const p = prompt.toLowerCase();
+  if (/learn|roadmap|skill|course|education|study|90-day|90 day/.test(p)) return "learning";
+  if (/compare|versus| vs |competitor|competition|rival|alternative/.test(p)) return "competitive";
+  if (/invest|stock|valuation|thesis|equity|portfolio/.test(p)) return "investment";
   if (/coffee|restaurant|cafe|shop|retail|store/.test(p)) return "retail";
   if (/apartment|house|real estate|rent|mortgage|property|buy a home/.test(p)) return "realestate";
-  if (/invest|stock|valuation|thesis|equity|portfolio/.test(p)) return "investment";
-  if (/learn|roadmap|skill|course|education|study/.test(p)) return "learning";
-  if (/competitor|competition|rival/.test(p)) return "competitive";
   if (/market|tam|sam|sizing|segment/.test(p)) return "market";
-  if (/saas|startup|business plan|validate|launch/.test(p)) return "startup";
+  if (/saas|startup|business plan|validate|launch|agency|build|start/.test(p)) return "startup";
   if (/health|wellness|fitness|medical/.test(p)) return "health";
   if (/travel|tourism|destination/.test(p)) return "travel";
   return "general";
 }
 
+function detectReportIntent(prompt) {
+  const p = prompt.toLowerCase();
+  if (/learn|roadmap|skill|course|study|90-day|90 day|practice/.test(p)) return "learning_plan";
+  if (/compare|versus| vs |competitor comparison|stripe|paypal|alternative/.test(p)) return "competitor_comparison";
+  if (/investment thesis|invest|stock|valuation|portfolio|equity/.test(p)) return "investment_thesis";
+  if (/business plan|financial plan|go-to-market|go to market/.test(p)) return "business_plan";
+  if (/market analysis|market size|market sizing|analyze the market|market for|tam|sam|segment/.test(p)) return "market_analysis";
+  if (/product strategy|positioning|roadmap|feature|pricing strategy/.test(p)) return "product_strategy";
+  if (/validate|should i build|should i start|startup idea|launch|start an|start a|build an|build a/.test(p)) return "startup_validation";
+  return "general_research";
+}
+
+function detectIndustrySignal(prompt) {
+  const p = prompt.toLowerCase();
+  if (/coffee|cafe|restaurant|menu|foot traffic|hospitality/.test(p)) return "coffee_shop";
+  if (/finance|fintech|payment|stripe|paypal|banking|investment/.test(p)) return "finance";
+  if (/saas|software|subscription|mvp|workflow/.test(p)) return "saas";
+  if (/automation agency|ai automation|agency/.test(p)) return "ai_automation";
+  if (/b2b|consulting|service|agency|small business/.test(p)) return "b2b_service";
+  if (/ecommerce|e-commerce|shopify|online store|marketplace/.test(p)) return "ecommerce";
+  if (/education|course|learning|student|curriculum|product design/.test(p)) return "education";
+  if (/health|healthcare|medical|wellness|fitness/.test(p)) return "healthcare";
+  if (/real estate|apartment|property|rent|mortgage/.test(p)) return "real_estate";
+  if (/local|riga|latvia|neighborhood|city/.test(p)) return "local_business";
+  if (/consumer app|mobile app|b2c|social app/.test(p)) return "consumer_app";
+  if (/ai|llm|machine learning|automation/.test(p)) return "ai_automation";
+  return "general";
+}
+
 function extractTopic(prompt) {
   return prompt
-    .replace(/^(create|analyze|research|build|estimate|validate|should i|compare)\s+(a|an|the|whether|if)-\s*/i, "")
+    .replace(/^should i\s+(build|start|create|launch|invest in|buy|choose)\s+/i, "")
+    .replace(/^(create|analyze|research|build|estimate|validate|compare|start|launch)\s+(an|a|the|whether|if)?\s*/i, "")
+    .replace(/^(business plan|product strategy|investment thesis)\s+for\s+/i, "")
+    .replace(/^market\s+for\s+/i, "")
+    .replace(/^whether\s+to\s+/i, "")
+    .replace(/^to\s+/i, "")
     .replace(/[?.!]+$/, "")
     .trim() || "this opportunity";
 }
@@ -230,6 +285,8 @@ function extractTopic(prompt) {
 function analyzePrompt(prompt) {
   const seed = hashCode(prompt);
   const category = detectCategory(prompt);
+  const intent = detectReportIntent(prompt);
+  const industry = detectIndustrySignal(prompt);
   const topic = extractTopic(prompt);
   const title = titleFromPrompt(prompt);
   const confidence = seeded(`${seed}c`, 78, 94);
@@ -269,12 +326,15 @@ function analyzePrompt(prompt) {
   ];
 
   const categoryContent = getCategoryContent(category, topic, seed);
+  const dynamicContent = getDynamicReportContent({ prompt, topic, seed, category, intent, industry });
 
   return {
     prompt,
     title,
     topic,
     category,
+    intent,
+    industry,
     confidence,
     marketSize: formatMoney(marketB),
     competitorCount,
@@ -283,7 +343,8 @@ function analyzePrompt(prompt) {
     demand,
     bars: barSets[category === "market" ? "market" : category === "startup" ? "startup" : "default"],
     segmentBars,
-    ...categoryContent
+    ...categoryContent,
+    ...dynamicContent
   };
 }
 
@@ -501,6 +562,632 @@ function getCategoryContent(category, topic, seed) {
   };
 }
 
+function industryLabel(industry) {
+  const labels = {
+    saas: "SaaS",
+    coffee_shop: "restaurant / coffee shop",
+    ai_automation: "AI automation",
+    ecommerce: "ecommerce",
+    education: "education",
+    finance: "finance",
+    healthcare: "healthcare",
+    real_estate: "real estate",
+    local_business: "local business",
+    consumer_app: "consumer app",
+    b2b_service: "B2B service",
+    general: "general research"
+  };
+  return labels[industry] || labels.general;
+}
+
+function intentLabel(intent) {
+  const labels = {
+    startup_validation: "startup validation",
+    business_plan: "business plan",
+    market_analysis: "market analysis",
+    competitor_comparison: "competitor comparison",
+    product_strategy: "product strategy",
+    learning_plan: "learning plan",
+    investment_thesis: "investment thesis",
+    general_research: "general research"
+  };
+  return labels[intent] || labels.general_research;
+}
+
+function getIndustryProfile(industry, topic) {
+  const profiles = {
+    saas: {
+      customer: "Founder or operator validating a repeatable SaaS workflow for a defined ICP.",
+      thesis: "A SaaS opportunity is strongest when one painful workflow, one buyer, and one measurable outcome are clear before building.",
+      monetization: "Start with a narrow subscription or usage-based offer tied to a single high-value workflow.",
+      findings: [
+        ["Workflow pain", "The strongest signal is repeated manual work that teams already budget time or money to solve."],
+        ["ICP clarity", "Early validation should focus on one buyer segment before expanding features."],
+        ["Willingness to pay", "Pricing tests should happen before a full product build, not after launch."]
+      ],
+      risks: [
+        ["Feature spread", "Building for too many use cases early can dilute the product and slow validation."],
+        ["Weak distribution", "A useful SaaS product still fails if the buyer channel is unclear."],
+        ["Low switching urgency", "Teams may like the idea but delay purchase unless the workflow cost is obvious."]
+      ],
+      actions: [
+        ["Define the ICP", "Write a one-page profile of the buyer, trigger event, current workaround, and budget owner."],
+        ["Validate the workflow", "Interview 10 target users and map the exact steps they want removed or simplified."],
+        ["Test willingness to pay", "Present a simple paid offer before building the full product."],
+        ["Build one-use-case MVP", "Ship the smallest workflow that produces a measurable business outcome."]
+      ],
+      sources: [
+        ["SaaS pricing pages", "Review pricing tiers, packaging, limits, and upgrade paths for adjacent tools."],
+        ["Review sites", "Use G2, Capterra, Product Hunt, and forums to identify complaints and unmet needs."],
+        ["Product documentation", "Study onboarding flows, integrations, APIs, and workflow depth from existing products."]
+      ],
+      competitors: [
+        ["Vertical SaaS tools", "Focused workflows", "Narrow scope", "Win with sharper workflow execution"],
+        ["Horizontal platforms", "Broad feature sets", "Complex adoption", "Win with speed and clarity"],
+        ["Manual services", "Human expertise", "Hard to scale", "Productize the repeated workflow"]
+      ]
+    },
+    coffee_shop: {
+      customer: "Local customers who need a convenient, repeatable reason to visit beyond one-time novelty.",
+      thesis: "A coffee shop works when location demand, menu economics, staffing, and repeat purchase behavior align.",
+      monetization: "Revenue depends on daily transaction volume, average order value, gross margin, and repeat visits.",
+      findings: [
+        ["Location demand", "Foot traffic, nearby offices, transit, and residential density matter more than broad market size."],
+        ["Menu economics", "A few high-margin repeatable items should carry the model before expanding the menu."],
+        ["Repeat purchase", "The concept needs a habitual reason to return, not just a strong opening week."]
+      ],
+      risks: [
+        ["Rent pressure", "A premium location can erase margins if revenue assumptions are too optimistic."],
+        ["Labor coverage", "Staffing gaps quickly damage service consistency and customer experience."],
+        ["Seasonality", "Demand may shift sharply by weather, tourism, work patterns, and local events."]
+      ],
+      actions: [
+        ["Validate location demand", "Observe target streets at morning, lunch, and weekend periods before signing a lease."],
+        ["Estimate daily foot traffic", "Build conservative, base, and optimistic transaction scenarios."],
+        ["Model menu economics", "Calculate gross margin for core drinks, food items, and bundles."],
+        ["Test repeat purchase", "Run a pop-up or preorder test to measure return visits and price sensitivity."]
+      ],
+      sources: [
+        ["Foot traffic data", "Use local observation, mobility data, nearby anchors, and transit patterns."],
+        ["Rent comparables", "Compare lease rates, service charges, and fit-out costs in target areas."],
+        ["Competitor menus", "Review nearby menus, pricing, reviews, opening hours, and delivery platform demand."]
+      ],
+      competitors: [
+        ["Local cafes", "Neighborhood familiarity", "Inconsistent positioning", "Win with service and repeatable quality"],
+        ["Chains", "Operational consistency", "Less local character", "Win with local identity"],
+        ["Delivery platforms", "Convenience", "Lower experience value", "Win with in-person ritual"]
+      ]
+    },
+    ai_automation: {
+      customer: "Small businesses or teams with repetitive admin, sales, support, reporting, or operations work.",
+      thesis: "AI automation is viable when the service solves a painful workflow with clear before-and-after time savings.",
+      monetization: "Start with paid audits, workflow implementation packages, and recurring maintenance retainers.",
+      findings: [
+        ["Workflow specificity", "Generic automation messaging is weak; named workflows create stronger buyer interest."],
+        ["Trust barrier", "Clients need simple explanations, human oversight, and clear failure handling."],
+        ["Service packaging", "A productized offer is easier to sell than open-ended consulting."]
+      ],
+      risks: [
+        ["Overpromising automation", "Unclear scope can create disappointment when edge cases require human review."],
+        ["Client data sensitivity", "Small businesses may hesitate unless privacy and access controls are explained."],
+        ["Low repeatability", "Custom projects can become hard to scale without reusable templates."]
+      ],
+      actions: [
+        ["Pick one vertical", "Choose a narrow segment such as clinics, agencies, accountants, or local services."],
+        ["Audit five workflows", "Document time spent, tools used, failure points, and measurable savings."],
+        ["Sell a pilot package", "Offer a fixed-scope implementation with clear deliverables and support limits."],
+        ["Create reusable playbooks", "Turn each successful pilot into a repeatable template and checklist."]
+      ],
+      sources: [
+        ["Workflow interviews", "Collect current-process screenshots, time estimates, and tool stacks from target clients."],
+        ["Automation tool docs", "Review Zapier, Make, CRM, helpdesk, spreadsheet, and AI provider documentation."],
+        ["Local business directories", "Identify reachable segments and common operational patterns."]
+      ],
+      competitors: [
+        ["Freelance automators", "Flexible delivery", "Variable quality", "Win with packaged outcomes"],
+        ["No-code agencies", "Implementation speed", "Broad positioning", "Win with vertical specialization"],
+        ["Internal staff", "Context knowledge", "Limited automation expertise", "Win with measurable time savings"]
+      ]
+    },
+    education: {
+      customer: "Learners who need a structured path, practice projects, feedback loops, and visible progress.",
+      thesis: "A learning plan succeeds when it converts broad ambition into weekly milestones and portfolio evidence.",
+      monetization: "Value comes from structured roadmaps, project feedback, accountability, and curated resources.",
+      findings: [
+        ["Milestone clarity", "Weekly outcomes prevent the plan from becoming passive content consumption."],
+        ["Practice projects", "Portfolio artifacts are stronger proof of skill than completed lessons alone."],
+        ["Feedback loop", "Learners improve faster when work is reviewed against clear criteria."]
+      ],
+      risks: [
+        ["Passive learning", "Watching courses without projects creates weak retention and false progress."],
+        ["Scope overload", "Too many resources can reduce completion and confidence."],
+        ["No assessment", "Without benchmarks, learners cannot tell whether skill is improving."]
+      ],
+      actions: [
+        ["Define weekly milestones", "Set one measurable outcome for each week of the 90-day plan."],
+        ["Choose practice projects", "Build three projects that demonstrate the target skill in realistic situations."],
+        ["Measure skill progress", "Use rubrics, peer feedback, and before/after portfolio reviews."],
+        ["Schedule review cycles", "Reserve weekly time to revise work instead of only adding new material."]
+      ],
+      sources: [
+        ["Curriculum sources", "Compare syllabi, course outlines, and respected reading lists."],
+        ["Benchmark projects", "Study portfolios, case studies, and hiring tasks in the target field."],
+        ["Community feedback", "Use critique groups, mentors, forums, or professional communities for review."]
+      ],
+      competitors: [
+        ["Online courses", "Structured content", "Limited feedback", "Win with project execution"],
+        ["Bootcamps", "Accountability", "High cost", "Win with flexible milestones"],
+        ["Self-study", "Low cost", "No structure", "Win with clear progression"]
+      ]
+    },
+    finance: {
+      customer: "Founders, operators, or analysts choosing payment, finance, or investment tools under uncertainty.",
+      thesis: "Finance decisions should compare cost, risk, integration effort, support, compliance, and switching friction.",
+      monetization: "Value comes from reducing decision risk and clarifying trade-offs before committing to a provider.",
+      findings: [
+        ["Cost structure", "Fees, minimums, chargebacks, and international costs can change the real economics."],
+        ["Integration depth", "Developer experience and ecosystem maturity often matter as much as headline pricing."],
+        ["Risk profile", "Compliance, availability, support, and dispute handling should be evaluated early."]
+      ],
+      risks: [
+        ["Hidden fees", "A cheaper headline rate can become expensive after volume, disputes, or currency needs."],
+        ["Migration friction", "Changing providers later may require engineering work and customer communication."],
+        ["Regulatory exposure", "Payment and finance workflows require careful compliance review."]
+      ],
+      actions: [
+        ["Map transaction needs", "List currencies, geographies, billing models, refunds, disputes, and payout timing."],
+        ["Compare integration effort", "Review API docs, SDKs, test mode, webhooks, and implementation examples."],
+        ["Run a cost scenario", "Model fees across realistic monthly volume and edge cases."],
+        ["Validate support risk", "Check incident history, support channels, and user complaints."]
+      ],
+      sources: [
+        ["Pricing pages", "Compare public fees, limits, add-ons, and regional terms."],
+        ["Developer documentation", "Review API coverage, SDK quality, webhook handling, and examples."],
+        ["User reviews and status pages", "Check reliability, support, disputes, and outage history."]
+      ],
+      competitors: [
+        ["Stripe", "Developer-first payments", "Can become complex at scale", "Strong for SaaS billing and APIs"],
+        ["PayPal", "Broad consumer trust", "Developer experience varies", "Strong for familiar checkout"],
+        ["Local providers", "Regional fit", "Narrower ecosystem", "Strong when local payment methods matter"]
+      ]
+    },
+    ecommerce: {
+      customer: "Online buyers who need a clear product promise, trustworthy purchase experience, and reliable fulfillment.",
+      thesis: "An ecommerce opportunity is strongest when the product category has repeatable demand, defensible acquisition, and healthy contribution margin.",
+      monetization: "Revenue depends on average order value, gross margin, repeat purchase, paid acquisition efficiency, and fulfillment reliability.",
+      findings: [
+        ["Demand concentration", "The best early signal is a narrow audience already searching for or buying similar products."],
+        ["Margin discipline", "Shipping, returns, discounts, and ad costs can erase attractive headline margins."],
+        ["Trust signals", "Reviews, product detail, delivery clarity, and support expectations influence conversion."]
+      ],
+      risks: [
+        ["Acquisition cost", "Paid channels can become uneconomic if repeat purchase is weak."],
+        ["Fulfillment complexity", "Stockouts, returns, delivery delays, and supplier quality can damage trust."],
+        ["Commodity pressure", "Undifferentiated products invite price comparison and low loyalty."]
+      ],
+      actions: [
+        ["Validate demand", "Test a narrow product category with landing pages, preorders, or small-batch inventory."],
+        ["Model contribution margin", "Include product cost, payment fees, shipping, returns, support, and ads."],
+        ["Study purchase objections", "Review competitor reviews, FAQs, return reasons, and support complaints."],
+        ["Define repeat path", "Identify bundles, subscriptions, accessories, or lifecycle triggers."]
+      ],
+      sources: [
+        ["Marketplace data", "Review Amazon, Etsy, Shopify stores, category rankings, reviews, and pricing."],
+        ["Ad and search signals", "Use keyword demand, social ads, creator content, and search trends as directional input."],
+        ["Fulfillment benchmarks", "Compare supplier terms, delivery times, return rates, and logistics costs."]
+      ],
+      competitors: [
+        ["Marketplaces", "Existing demand", "High competition", "Win with sharper positioning"],
+        ["DTC brands", "Brand control", "Higher acquisition cost", "Win with trust and retention"],
+        ["Local retailers", "Immediate availability", "Limited digital reach", "Win with convenience"]
+      ]
+    },
+    healthcare: {
+      customer: "Patients, consumers, providers, or wellness users who need trustworthy outcomes and low-friction adoption.",
+      thesis: "Healthcare opportunities require unusually high trust, clear user benefit, responsible claims, and careful source verification.",
+      monetization: "Value may come from subscriptions, provider partnerships, employer programs, or improved operational efficiency.",
+      findings: [
+        ["Trust threshold", "Users need clear limits, evidence, privacy expectations, and responsible language."],
+        ["Adoption friction", "Even useful tools fail if they add work for patients or providers."],
+        ["Outcome clarity", "The strongest concept explains what improves and how that improvement is measured."]
+      ],
+      risks: [
+        ["Regulatory sensitivity", "Claims, data handling, and medical context require expert review."],
+        ["Privacy concern", "Users may hesitate if data use and storage are not clear."],
+        ["Clinical ambiguity", "Wellness and medical claims must not be overstated."]
+      ],
+      actions: [
+        ["Define the user context", "Separate patient, provider, payer, employer, and consumer wellness use cases."],
+        ["Review claim boundaries", "List what the product can responsibly say and what requires expert validation."],
+        ["Test adoption friction", "Map the workflow and remove steps that add burden."],
+        ["Validate evidence needs", "Identify studies, guidelines, and primary data required before launch."]
+      ],
+      sources: [
+        ["Clinical guidance", "Review official guidelines, peer-reviewed research, and trusted health organizations."],
+        ["Privacy requirements", "Check regional privacy expectations, data sensitivity, and consent needs."],
+        ["User workflow evidence", "Interview patients, providers, or wellness users about current behavior."]
+      ],
+      competitors: [
+        ["Health apps", "Consumer familiarity", "Trust varies widely", "Win with credible scope"],
+        ["Provider tools", "Clinical context", "Slow adoption", "Win with low workflow burden"],
+        ["Manual coaching", "Human trust", "Hard to scale", "Win with structured support"]
+      ]
+    },
+    real_estate: {
+      customer: "Buyers, renters, investors, or operators comparing property decisions against financial and lifestyle constraints.",
+      thesis: "Real estate decisions depend on local prices, financing, hold period, liquidity, comparable rents, and downside scenarios.",
+      monetization: "Value comes from decision support, scenario modeling, local comparison, and risk-adjusted planning.",
+      findings: [
+        ["Local data dependency", "Neighborhood-level comps matter more than broad national trends."],
+        ["Hold period", "Transaction costs make short timelines materially riskier."],
+        ["Cash flow sensitivity", "Rates, vacancy, maintenance, taxes, and rent assumptions drive the outcome."]
+      ],
+      risks: [
+        ["Local market shift", "Small area price changes can alter the conclusion quickly."],
+        ["Financing risk", "Rates, lending terms, and affordability can change before purchase."],
+        ["Maintenance surprises", "Repairs and building costs can invalidate optimistic scenarios."]
+      ],
+      actions: [
+        ["Collect local comps", "Compare recent sale prices, rental listings, and days-on-market in the target area."],
+        ["Model scenarios", "Build conservative, base, and stress cases for 5- and 10-year horizons."],
+        ["Check financing", "Estimate monthly payment, cash required, rate sensitivity, and liquidity impact."],
+        ["Define decision threshold", "Set the conditions under which buying, renting, or waiting wins."]
+      ],
+      sources: [
+        ["Property listings", "Use local sales, rent listings, days-on-market, and comparable property data."],
+        ["Financing data", "Review mortgage rates, bank terms, taxes, insurance, and transaction costs."],
+        ["Local indicators", "Check employment, population, infrastructure, schools, and neighborhood demand."]
+      ],
+      competitors: [
+        ["Buying", "Equity potential", "Less flexibility", "Best with long hold period"],
+        ["Renting", "Flexibility", "No equity build", "Best with uncertain timeline"],
+        ["Waiting", "Preserves liquidity", "May miss upside", "Best when assumptions are weak"]
+      ]
+    },
+    b2b_service: {
+      customer: "Business buyers who need a reliable outcome, clear scope, and low operational risk.",
+      thesis: "A B2B service works when the pain is frequent, the buyer owns budget, and delivery can become repeatable.",
+      monetization: "Start with a fixed-scope offer, then expand into retainers, templates, or recurring services.",
+      findings: [
+        ["Buyer trigger", "The best opportunities connect to a moment when the buyer must act."],
+        ["Scope control", "Clear boundaries protect margin and delivery quality."],
+        ["Repeatability", "Reusable playbooks make the service easier to sell and fulfill."]
+      ],
+      risks: [
+        ["Custom work trap", "Too much bespoke delivery limits scale and margin."],
+        ["Long sales cycles", "Business buyers may need proof, approvals, and timing alignment."],
+        ["Outcome ambiguity", "Weak success metrics make value harder to prove."]
+      ],
+      actions: [
+        ["Define the offer", "Write the exact problem solved, deliverables, timeline, and exclusions."],
+        ["Interview target buyers", "Validate budget, urgency, current workaround, and purchase process."],
+        ["Package a pilot", "Sell a fixed-scope version before building a broad service menu."],
+        ["Document delivery", "Turn each project into reusable checklists and templates."]
+      ],
+      sources: [
+        ["Buyer interviews", "Capture workflow, urgency, budget, and decision criteria."],
+        ["Competitor offers", "Review service pages, pricing signals, case studies, and positioning."],
+        ["Industry communities", "Use forums, directories, LinkedIn, and reviews to find repeated pain."]
+      ],
+      competitors: [
+        ["Freelancers", "Flexible capacity", "Variable process", "Win with repeatable delivery"],
+        ["Agencies", "Full-service support", "Higher cost", "Win with focused scope"],
+        ["Internal teams", "Company context", "Limited bandwidth", "Win with speed and expertise"]
+      ]
+    },
+    consumer_app: {
+      customer: "Consumers who need a habit-forming, low-friction solution to a repeated personal problem.",
+      thesis: "Consumer apps need a sharp use case, fast time-to-value, retention loop, and believable acquisition path.",
+      monetization: "Revenue may come from subscriptions, freemium upgrades, transactions, or partnerships once retention is proven.",
+      findings: [
+        ["Habit potential", "The core behavior must repeat often enough to support retention."],
+        ["Onboarding speed", "Users should experience value in the first session."],
+        ["Acquisition fit", "Consumer growth needs a channel that matches the audience and use case."]
+      ],
+      risks: [
+        ["Low retention", "Initial curiosity can fade quickly without a repeated trigger."],
+        ["Crowded category", "Consumer apps often compete with many substitutes and free alternatives."],
+        ["Monetization delay", "Payment usually follows retention proof, not the other way around."]
+      ],
+      actions: [
+        ["Define the habit loop", "Identify trigger, action, reward, and repeat frequency."],
+        ["Prototype first-session value", "Test whether users understand and benefit from the app in minutes."],
+        ["Measure retention", "Track whether users return without reminders or incentives."],
+        ["Test acquisition messages", "Compare three positioning angles with the target audience."]
+      ],
+      sources: [
+        ["App store reviews", "Study complaints, ratings, feature requests, and retention clues."],
+        ["Community discussions", "Review Reddit, forums, social posts, and creator content for repeated pain."],
+        ["Comparable apps", "Analyze onboarding, pricing, notifications, and habit loops."]
+      ],
+      competitors: [
+        ["Existing apps", "Installed behavior", "Feature fatigue", "Win with simpler value"],
+        ["Manual habits", "No switching cost", "Low structure", "Win with convenience"],
+        ["Content communities", "Engagement", "Limited workflow", "Win with actionability"]
+      ]
+    }
+  };
+  return profiles[industry] || null;
+}
+
+function getIntentProfile(intent, topic, industry) {
+  const label = industryLabel(industry);
+  const profiles = {
+    startup_validation: {
+      executive: `This demo report treats <strong>${escapeHtml(topic)}</strong> as a validation problem. The priority is not proving the idea is exciting; it is testing whether a specific buyer has a painful enough problem, a reachable channel, and a reason to act now in the ${label} space.`,
+      findings: [
+        ["Validation focus", "The first milestone is evidence of real demand, not a polished product."],
+        ["Buyer clarity", "The report should identify who feels the pain and who controls the budget."],
+        ["Fastest proof", "A focused pilot, landing page, interview sequence, or paid test is more useful than broad research."]
+      ]
+    },
+    business_plan: {
+      executive: `This demo report frames <strong>${escapeHtml(topic)}</strong> as an operating plan. The most important questions are customer demand, delivery model, unit economics, launch sequencing, and what must be proven before committing serious capital.`,
+      findings: [
+        ["Operating model", "The plan needs a clear path from first customer to repeatable delivery."],
+        ["Unit economics", "Pricing, cost structure, and capacity should be modeled before launch."],
+        ["Launch sequence", "The safest plan starts with a narrow proof point and expands after evidence appears."]
+      ]
+    },
+    market_analysis: {
+      executive: `This demo report frames <strong>${escapeHtml(topic)}</strong> as a market analysis. The goal is to understand segment quality, demand signals, competitive pressure, and what evidence would make the opportunity more or less attractive.`,
+      findings: [
+        ["Segment quality", "A smaller reachable segment can be more useful than a large abstract market."],
+        ["Demand evidence", "Search behavior, spending patterns, reviews, and workflow pain should be compared."],
+        ["Market timing", "The strongest opportunities have a clear reason why now is better than later."]
+      ]
+    },
+    competitor_comparison: {
+      executive: `This demo report compares <strong>${escapeHtml(topic)}</strong> through practical buyer criteria rather than brand preference. The strongest decision will come from comparing use case fit, cost, integration effort, trust, support, and switching risk.`,
+      findings: [
+        ["Decision criteria", "The comparison should start with the user's workflow, not vendor popularity."],
+        ["Trade-off clarity", "Each option should be evaluated by where it is strongest and where it creates friction."],
+        ["Implementation risk", "Integration, support, migration, and operational edge cases should be checked before selection."]
+      ]
+    },
+    product_strategy: {
+      executive: `This demo report treats <strong>${escapeHtml(topic)}</strong> as a product strategy question. The priority is deciding which customer problem deserves focus, what position the product should own, and what to build or avoid first.`,
+      findings: [
+        ["Positioning", "The product needs a sharp promise that a target customer can repeat in one sentence."],
+        ["Scope control", "Early product strategy should reduce choices, not expand the feature list."],
+        ["Adoption path", "The first workflow should be easy to try and valuable enough to repeat."]
+      ]
+    },
+    learning_plan: {
+      executive: `This demo report turns <strong>${escapeHtml(topic)}</strong> into a structured learning plan. The objective is to move from vague interest to weekly outcomes, practice projects, feedback, and visible proof of skill.`,
+      findings: [
+        ["Weekly milestones", "A good plan defines what the learner can demonstrate each week."],
+        ["Project evidence", "Practice projects should create portfolio artifacts, not just notes."],
+        ["Feedback rhythm", "Skill improves faster when work is reviewed and revised on a schedule."]
+      ]
+    },
+    investment_thesis: {
+      executive: `This demo report frames <strong>${escapeHtml(topic)}</strong> as an investment thesis draft. It separates thesis drivers, risks, valuation assumptions, evidence to verify, and decision triggers. It is not financial advice.`,
+      findings: [
+        ["Thesis drivers", "The strongest thesis identifies what must be true for upside to occur."],
+        ["Risk boundaries", "Downside scenarios should be explicit before position sizing."],
+        ["Evidence checklist", "Financials, management commentary, market data, and comparables need source review."]
+      ]
+    },
+    general_research: {
+      executive: `This demo report organizes <strong>${escapeHtml(topic)}</strong> into a decision-ready research draft. It highlights useful signals, open assumptions, recommended evidence, and practical next steps without claiming live verification.`,
+      findings: [
+        ["Clarify the question", "The most useful report starts by defining what decision the research should support."],
+        ["Separate evidence from assumptions", "Demo estimates should be treated as structure until checked against real sources."],
+        ["Choose the next proof point", "The report should end with what to verify next, not more open-ended reading."]
+      ]
+    }
+  };
+  return profiles[intent] || profiles.general_research;
+}
+
+function getDynamicBars(intent, industry, seed) {
+  if (intent === "learning_plan") {
+    return [
+      ["Foundation clarity", seeded(`${seed}lb1`, 62, 88)],
+      ["Practice intensity", seeded(`${seed}lb2`, 58, 86)],
+      ["Feedback access", seeded(`${seed}lb3`, 42, 78)],
+      ["Portfolio value", seeded(`${seed}lb4`, 64, 90)]
+    ];
+  }
+  if (intent === "competitor_comparison") {
+    return [
+      ["Use case fit", seeded(`${seed}cb1`, 62, 90)],
+      ["Integration effort", seeded(`${seed}cb2`, 42, 76)],
+      ["Switching risk", seeded(`${seed}cb3`, 38, 72)],
+      ["Total cost clarity", seeded(`${seed}cb4`, 52, 84)]
+    ];
+  }
+  if (industry === "coffee_shop") {
+    return [
+      ["Location demand", seeded(`${seed}rb1`, 58, 88)],
+      ["Menu margin", seeded(`${seed}rb2`, 52, 82)],
+      ["Repeat purchase", seeded(`${seed}rb3`, 48, 78)],
+      ["Lease sensitivity", seeded(`${seed}rb4`, 45, 74)]
+    ];
+  }
+  if (industry === "saas" || industry === "ai_automation") {
+    return [
+      ["Workflow pain", seeded(`${seed}sb1`, 62, 90)],
+      ["Buyer urgency", seeded(`${seed}sb2`, 52, 84)],
+      ["Willingness to pay", seeded(`${seed}sb3`, 48, 82)],
+      ["Delivery complexity", seeded(`${seed}sb4`, 42, 78)]
+    ];
+  }
+  return [
+    ["Opportunity clarity", seeded(`${seed}gb1`, 58, 88)],
+    ["Evidence quality needed", seeded(`${seed}gb2`, 50, 82)],
+    ["Execution effort", seeded(`${seed}gb3`, 42, 78)],
+    ["Decision usefulness", seeded(`${seed}gb4`, 60, 88)]
+  ];
+}
+
+function getDynamicReportContent({ topic, seed, intent, industry }) {
+  const intentProfile = getIntentProfile(intent, topic, industry);
+  const industryProfile = getIndustryProfile(industry, topic);
+  const label = industryLabel(industry);
+  const fallbackCompetitors = [
+    ["Direct alternatives", "Comparable current solutions", "Limited context in demo mode", "Verify with live market research"],
+    ["Manual workflow", "Existing user behavior", "Time-consuming and inconsistent", "Clarify what should be automated"],
+    ["General tools", "Broad capability", "Weak fit for the exact job", "Win with focused execution"]
+  ];
+
+  return {
+    executive: intentProfile.executive,
+    thesis: industryProfile?.thesis || `The value of ${topic} depends on whether the user problem is specific, urgent, and supported by evidence.`,
+    customer: industryProfile?.customer || `People evaluating ${topic} who need clarity before committing time or money.`,
+    monetization: industryProfile?.monetization || "The strongest value path depends on saved time, reduced uncertainty, or a clearer decision.",
+    findings: intentProfile.findings.concat(industryProfile?.findings || []),
+    risks: industryProfile?.risks || [
+      ["Evidence gap", "Important assumptions need source review before decisions are made."],
+      ["Audience ambiguity", "The report becomes weaker if the target user or buyer is not specific."],
+      ["Execution uncertainty", "The path forward needs concrete milestones, not only broad research."]
+    ],
+    financial: getDynamicFinancial(intent, industry, seed),
+    actions: industryProfile?.actions || getDynamicActions(intent),
+    sources: industryProfile?.sources || getDynamicSources(intent),
+    competitors: industryProfile?.competitors || fallbackCompetitors,
+    advantages: getDynamicAdvantages(intent, industry, topic),
+    disadvantages: getDynamicDisadvantages(intent, industry),
+    bars: getDynamicBars(intent, industry, seed),
+    limitations: getDynamicLimitations(intent, industry)
+  };
+}
+
+function getDynamicFinancial(intent, industry, seed) {
+  if (intent === "learning_plan") {
+    return [
+      ["Weekly time budget", `${seeded(`${seed}lf1`, 6, 14)} focused hours per week recommended`],
+      ["Project target", `${seeded(`${seed}lf2`, 2, 4)} portfolio artifacts by day 90`],
+      ["Review cadence", "Weekly feedback or self-review checkpoints"]
+    ];
+  }
+  if (industry === "coffee_shop") {
+    return [
+      ["Startup capital range", `$${seeded(`${seed}cf1`, 120, 420)}K illustrative setup and runway range`],
+      ["Daily transaction target", `${seeded(`${seed}cf2`, 90, 260)} orders/day in a base-case model`],
+      ["Margin sensitivity", "Rent, labor, waste, and average order value drive the model"]
+    ];
+  }
+  if (industry === "saas") {
+    return [
+      ["Pilot revenue target", `$${seeded(`${seed}sf1`, 2, 12)}K MRR before expanding scope`],
+      ["CAC sensitivity", "Founder-led sales should validate channels before paid acquisition"],
+      ["Expansion path", "Retention and workflow depth matter more than broad feature count"]
+    ];
+  }
+  if (industry === "ai_automation") {
+    return [
+      ["Pilot package", `$${seeded(`${seed}af1`, 1, 8)}K fixed-scope implementation test`],
+      ["Retainer potential", `$${seeded(`${seed}af2`, 500, 2500)}/mo for monitoring and improvements`],
+      ["Delivery leverage", "Reusable templates determine whether service work scales"]
+    ];
+  }
+  if (industry === "finance" || intent === "competitor_comparison") {
+    return [
+      ["Cost scenario", "Model total cost across expected transaction volume and edge cases"],
+      ["Switching cost", "Include engineering, operations, support, and customer communication"],
+      ["Risk premium", "Reliability and dispute handling may matter more than small fee differences"]
+    ];
+  }
+  return [
+    ["Budget range", "Use conservative, base, and optimistic cases before committing"],
+    ["Cost drivers", "Identify the two or three variables that most affect the outcome"],
+    ["Decision threshold", "Define what evidence would justify moving forward"]
+  ];
+}
+
+function getDynamicActions(intent) {
+  const actions = {
+    business_plan: [
+      ["Write the operating model", "Define customer, offer, channel, delivery process, cost structure, and launch sequence."],
+      ["Build a simple financial model", "Create conservative, base, and optimistic scenarios before spending heavily."],
+      ["Run a proof test", "Validate demand with a narrow pilot, preorder, landing page, or customer interview sprint."],
+      ["Review go/no-go criteria", "Decide which metrics must be true before scaling."]
+    ],
+    market_analysis: [
+      ["Narrow the segment", "Define the reachable audience before using broad market estimates."],
+      ["Collect demand signals", "Compare search behavior, reviews, spending patterns, and workflow pain."],
+      ["Map alternatives", "List direct competitors, substitutes, and manual workarounds."],
+      ["Identify proof gaps", "Decide which assumptions need source verification next."]
+    ],
+    competitor_comparison: [
+      ["Define decision criteria", "Rank price, implementation effort, support, trust, and use case fit."],
+      ["Build a comparison matrix", "Score each option against the same workflow requirements."],
+      ["Test the edge cases", "Review refunds, migration, support, integrations, and failure scenarios."],
+      ["Choose with a trigger", "Define what evidence would make one option clearly preferable."]
+    ],
+    product_strategy: [
+      ["Choose the first workflow", "Pick the smallest repeated job that creates a visible user outcome."],
+      ["Write positioning", "Describe the product promise in one sentence for one target customer."],
+      ["Cut nonessential features", "Delay anything that does not support the first workflow."],
+      ["Define success metrics", "Track completion, repeat usage, and willingness to pay."]
+    ],
+    general_research: [
+      ["Clarify the decision", "Rewrite the question as the decision this research should support."],
+      ["List assumptions", "Separate what is estimated from what needs evidence."],
+      ["Prioritize sources", "Choose the most reliable source categories to verify next."],
+      ["Create next steps", "Turn the report into a short action checklist."]
+    ]
+  };
+  return actions[intent] || actions.general_research;
+}
+
+function getDynamicSources(intent) {
+  const sources = {
+    business_plan: [
+      ["Customer evidence", "Interviews, preorders, surveys, or pilot usage from target buyers."],
+      ["Cost benchmarks", "Supplier pricing, operating expenses, staffing assumptions, and comparable businesses."],
+      ["Competitor references", "Pricing, positioning, reviews, offers, and customer complaints."]
+    ],
+    market_analysis: [
+      ["Market reports", "Industry reports, public datasets, government statistics, and analyst commentary."],
+      ["Demand signals", "Search trends, reviews, forums, job posts, and customer complaints."],
+      ["Competitor landscape", "Pricing pages, product docs, app listings, and category directories."]
+    ],
+    competitor_comparison: [
+      ["Product documentation", "Feature coverage, API docs, integrations, support docs, and limits."],
+      ["Pricing pages", "Fees, plans, usage limits, add-ons, and regional availability."],
+      ["User feedback", "Reviews, status pages, complaints, case studies, and migration stories."]
+    ],
+    product_strategy: [
+      ["User interviews", "Workflow walkthroughs, current tools, pain points, and buying triggers."],
+      ["Usage benchmarks", "Completion rates, activation moments, retention signals, and support requests."],
+      ["Competitive UX", "Onboarding, positioning, pricing, and feature depth from adjacent products."]
+    ],
+    general_research: [
+      ["Primary sources", "Official documents, public datasets, academic or industry research, and direct interviews."],
+      ["Market references", "Competitor pages, reviews, reports, and customer discussions."],
+      ["Decision evidence", "Any data that would change the recommendation or reduce uncertainty."]
+    ]
+  };
+  return sources[intent] || sources.general_research;
+}
+
+function getDynamicAdvantages(intent, industry, topic) {
+  return [
+    ["Focused decision frame", `${intentLabel(intent)} keeps ${topic} tied to a practical next decision.`],
+    ["Relevant assumptions", `The report emphasizes ${industryLabel(industry)} variables instead of generic research points.`],
+    ["Actionable draft", "The output is structured to become interviews, tests, models, or a comparison checklist."]
+  ];
+}
+
+function getDynamicDisadvantages(intent, industry) {
+  return [
+    ["Demo-only evidence", "The report does not use live sources, so important claims still need verification."],
+    ["Prompt sensitivity", `The ${intentLabel(intent)} draft improves when the audience, geography, budget, or constraints are specific.`],
+    ["Industry nuance", `${industryLabel(industry)} details may require local or expert validation before decisions are made.`]
+  ];
+}
+
+function getDynamicLimitations(intent, industry) {
+  return [
+    ["Estimated in demo mode", `This ${intentLabel(intent)} report uses local template logic and illustrative assumptions for the ${industryLabel(industry)} context.`],
+    ["Needs connected sources", "Live citations, current market data, official documents, interviews, and primary research would strengthen the final report."],
+    ["Best used as a first draft", "Use this report to structure thinking, identify evidence gaps, and decide what to verify next."]
+  ];
+}
+
 /* -- Report HTML builder -- */
 
 function barRow(label, value) {
@@ -558,6 +1245,7 @@ function buildReportHTML(data) {
     `<div><span>${i + 1}</span><strong>${escapeHtml(t)}</strong><p>${escapeHtml(p)}</p></div>`
   ).join("");
   const sourcesHtml = data.sources.map(([t, p]) => insightCard(t, p)).join("");
+  const limitationsHtml = (data.limitations || []).map(([t, p]) => insightCard(t, p)).join("");
   const competitorRows = comparisonRows(data.competitors);
   const competitorsHtml = competitorRows.map(([a, b, c, d]) =>
     `<tr><td>${escapeHtml(a)}</td><td>${escapeHtml(b)}</td><td>${escapeHtml(c)}</td><td>${escapeHtml(d)}</td></tr>`
@@ -729,20 +1417,7 @@ function buildReportHTML(data) {
         </div>
         <span>Transparent limits</span>
       </div>
-      <div class="confidence-grid">
-        <div>
-          <strong>Estimated in demo mode</strong>
-          <p>Market sizing, timing, financial ranges and signal strength are illustrative values generated from the prompt and template logic.</p>
-        </div>
-        <div>
-          <strong>Needs connected sources</strong>
-          <p>Live citations, current market data, official documents and primary research would make the final report stronger.</p>
-        </div>
-        <div>
-          <strong>Best used as a first draft</strong>
-          <p>Use this report to structure the decision, identify assumptions and decide what evidence to verify next.</p>
-        </div>
-      </div>
+      <div class="confidence-grid">${limitationsHtml}</div>
     </section>`;
 }
 
@@ -780,12 +1455,13 @@ function applyBarWidths(container) {
 }
 
 function renderReport(data) {
-  currentReport = data;
-  els.reportContent.innerHTML = buildReportHTML(data);
+  currentReport = normalizeReport(data);
+  currentPrompt = currentReport.prompt;
+  els.reportContent.innerHTML = currentReport.contentHtml || buildReportHTML(currentReport);
   applyBarWidths(els.reportContent);
 
-  els.reportTopTitle.textContent = data.title;
-  els.reportMeta.textContent = `Generated ${relativeTime(data.createdAt)} - 12 sections - demo estimates`;
+  els.reportTopTitle.textContent = currentReport.title;
+  els.reportMeta.textContent = `Generated ${relativeTime(currentReport.createdAt)} - 12 sections - demo estimates`;
   els.metricConfidence.textContent = "Demo";
   els.metricDepth.textContent = "Professional";
 
@@ -876,7 +1552,7 @@ function updatePreview(prompt) {
 }
 
 function renderRecentReports() {
-  const reports = getReports().slice(0, 3);
+  const reports = getReports().slice(0, 5);
 
   if (!reports.length) {
     els.recentEmpty.hidden = false;
@@ -890,21 +1566,33 @@ function renderRecentReports() {
   els.recentReportsList.querySelectorAll(".report-row").forEach(el => el.remove());
 
   reports.forEach(report => {
-    const btn = document.createElement("button");
-    btn.type = "button";
-    btn.className = "report-row";
-    btn.innerHTML = `
+    const row = document.createElement("div");
+    row.className = `report-row${report.pinned ? " pinned" : ""}`;
+    row.innerHTML = `
       <span>${escapeHtml(initials(report.title))}</span>
       <div>
         <strong>${escapeHtml(report.title)}</strong>
-        <p>${report.category} - 12 sections - ${relativeTime(report.createdAt)}${report.favorite ? " - *" : ""}</p>
+        <p>${escapeHtml(formatReportType(report))} - 12 sections - ${relativeTime(report.createdAt)}${report.pinned ? " - pinned" : ""}</p>
       </div>
-      <em>Open</em>`;
-    btn.addEventListener("click", () => {
+      <div class="report-row-actions">
+        <button type="button" data-action="open" aria-label="Open ${escapeHtml(report.title)}">Open</button>
+        <button type="button" data-action="pin" aria-label="${report.pinned ? "Unpin" : "Pin"} ${escapeHtml(report.title)}">${report.pinned ? "Unpin" : "Pin"}</button>
+        <button type="button" data-action="delete" aria-label="Delete ${escapeHtml(report.title)}">Delete</button>
+      </div>`;
+    row.addEventListener("click", e => {
+      const action = e.target.closest("[data-action]")?.dataset.action || "open";
+      if (action === "delete") {
+        deleteReport(report.id);
+        return;
+      }
+      if (action === "pin") {
+        toggleReportPin(report.id);
+        return;
+      }
       renderReport(report);
       showView("report");
     });
-    els.recentReportsList.appendChild(btn);
+    els.recentReportsList.appendChild(row);
   });
 
   const latest = reports[0];
@@ -915,33 +1603,69 @@ function renderRecentReports() {
 
 function saveReport(data) {
   const reports = getReports();
-  const entry = { ...data, id: hashCode(data.prompt + Date.now()), createdAt: new Date().toISOString(), favorite: false };
+  const entry = normalizeReport({
+    ...data,
+    id: hashCode(data.prompt + Date.now()),
+    createdAt: new Date().toISOString(),
+    reportType: data.intent || data.category || "general_research",
+    contentHtml: buildReportHTML(data),
+    pinned: false,
+    favorite: false
+  });
   reports.unshift(entry);
   saveReports(reports);
   renderRecentReports();
   return entry;
 }
 
+function formatReportType(report) {
+  return String(report.reportType || report.intent || report.category || "general_research")
+    .replace(/_/g, " ")
+    .replace(/\b\w/g, ch => ch.toUpperCase());
+}
+
 function updateFavoriteButton() {
   if (!currentReport) return;
-  const fav = currentReport.favorite;
-  els.favoriteReport.textContent = fav ? "* Favorited" : "* Favorite";
-  els.favoriteReport.setAttribute("aria-label", fav ? "Remove from favorites" : "Add to favorites");
-  els.favoriteReport.classList.toggle("is-favorite", fav);
+  const pinned = Boolean(currentReport.pinned || currentReport.favorite);
+  els.favoriteReport.textContent = pinned ? "* Pinned" : "* Pin";
+  els.favoriteReport.setAttribute("aria-label", pinned ? "Unpin report" : "Pin report");
+  els.favoriteReport.classList.toggle("is-favorite", pinned);
+}
+
+function toggleReportPin(id) {
+  const reports = getReports();
+  const idx = reports.findIndex(r => r.id === id);
+  if (idx === -1) return;
+
+  reports[idx].pinned = !reports[idx].pinned;
+  reports[idx].favorite = reports[idx].pinned;
+  if (currentReport && currentReport.id === id) {
+    currentReport.pinned = reports[idx].pinned;
+    currentReport.favorite = reports[idx].pinned;
+  }
+  saveReports(reports);
+  updateFavoriteButton();
+  renderRecentReports();
+  showToast(reports[idx].pinned ? "Report pinned" : "Report unpinned");
+}
+
+function deleteReport(id) {
+  const reports = getReports();
+  const report = reports.find(r => r.id === id);
+  const nextReports = reports.filter(r => r.id !== id);
+  saveReports(nextReports);
+  if (currentReport && currentReport.id === id) {
+    currentReport = nextReports[0] || null;
+    if (currentReport) renderReport(currentReport);
+    else showReportContent(false);
+  }
+  renderRecentReports();
+  showToast(report ? `Deleted "${report.title}"` : "Report deleted");
 }
 
 function toggleFavorite() {
   if (!currentReport) return;
-  const reports = getReports();
-  const idx = reports.findIndex(r => r.id === currentReport.id);
-  if (idx === -1) return;
-
-  reports[idx].favorite = !reports[idx].favorite;
-  currentReport.favorite = reports[idx].favorite;
-  saveReports(reports);
-  updateFavoriteButton();
-  renderRecentReports();
-  showToast(currentReport.favorite ? "Added to favorites" : "Removed from favorites");
+  toggleReportPin(currentReport.id);
 }
 
 /* -- Research flow -- */
@@ -1037,7 +1761,7 @@ function openPanel(name) {
   const titles = {
     templates: "Research Templates",
     history: "Report History",
-    favorites: "Favorite Reports",
+    favorites: "Pinned Reports",
     settings: "Settings"
   };
 
@@ -1097,35 +1821,51 @@ function openPanel(name) {
 }
 
 function renderHistoryPanel(favoritesOnly) {
-  const reports = getReports().filter(r => !favoritesOnly || r.favorite);
+  const reports = getReports().filter(r => !favoritesOnly || r.pinned);
 
   if (!reports.length) {
     els.panelBody.innerHTML = `
       <div class="empty-state">
         <div class="empty-icon" aria-hidden="true">${favoritesOnly ? "*" : "H"}</div>
-        <h3>${favoritesOnly ? "No favorites yet" : "No reports yet"}</h3>
-        <p>${favoritesOnly ? "Star a report to save it here." : "Generate your first report from the dashboard."}</p>
+        <h3>${favoritesOnly ? "No pinned reports yet" : "No saved reports yet"}</h3>
+        <p>${favoritesOnly ? "Pin important reports to keep them at the top of your workspace." : "Generate a local demo report and it will be saved here automatically."}</p>
       </div>`;
     return;
   }
 
   els.panelBody.innerHTML = `<div class="history-list">${reports.map(r => `
-    <button type="button" class="history-item" data-id="${r.id}">
+    <div class="history-item" data-id="${r.id}">
       <span class="history-icon">${escapeHtml(initials(r.title))}</span>
       <div>
         <strong>${escapeHtml(r.title)}</strong>
-        <p>${relativeTime(r.createdAt)} - demo estimates${r.favorite ? " - *" : ""}</p>
+        <p>${escapeHtml(formatReportType(r))} - ${relativeTime(r.createdAt)}${r.pinned ? " - pinned" : ""}</p>
       </div>
-    </button>`).join("")}</div>`;
+      <div class="history-actions">
+        <button type="button" data-action="open">Open</button>
+        <button type="button" data-action="pin">${r.pinned ? "Unpin" : "Pin"}</button>
+        <button type="button" data-action="delete">Delete</button>
+      </div>
+    </div>`).join("")}</div>`;
 
   els.panelBody.querySelectorAll(".history-item").forEach(btn => {
-    btn.addEventListener("click", () => {
-      const report = getReports().find(r => r.id === Number(btn.dataset.id));
-      if (report) {
-        renderReport(report);
-        closePanel();
-        showView("report");
+    btn.addEventListener("click", e => {
+      const id = Number(btn.dataset.id);
+      const action = e.target.closest("[data-action]")?.dataset.action || "open";
+      if (action === "delete") {
+        deleteReport(id);
+        renderHistoryPanel(favoritesOnly);
+        return;
       }
+      if (action === "pin") {
+        toggleReportPin(id);
+        renderHistoryPanel(favoritesOnly);
+        return;
+      }
+      const report = getReports().find(r => r.id === id);
+      if (!report) return;
+      renderReport(report);
+      closePanel();
+      showView("report");
     });
   });
 }
