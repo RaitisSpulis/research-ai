@@ -6,6 +6,9 @@ const FREE_LIMIT = 5;
 
 const researchAIConfig = {
   generationMode: "demo",
+  api: {
+    generateEndpoint: "/api/generate"
+  },
   providers: {
     demo: {},
     gemini: {
@@ -433,6 +436,20 @@ class AIService {
       gemini: new GeminiProvider(config.providers.gemini),
       openrouter: new OpenRouterProvider(config.providers.openrouter)
     };
+  }
+
+  async requestServerGeneration(prompt, mode) {
+    // TODO: Use this helper when AI Mode is enabled. Demo Mode intentionally does not call the backend.
+    const response = await fetch(this.config.api.generateEndpoint, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ prompt, mode })
+    });
+    const payload = await response.json();
+    if (!response.ok || payload.ok === false) {
+      throw new GenerationError("generation_failed", payload.error?.message || "Server generation failed.");
+    }
+    return payload.report;
   }
 
   getProvider() {
