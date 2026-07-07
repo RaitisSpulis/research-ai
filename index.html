@@ -141,7 +141,7 @@
       <header class="topbar">
         <div>
           <p class="eyebrow"><span aria-hidden="true"></span> Demo research workspace</p>
-          <h1>Turn questions into structured research reports.</h1>
+          <h1>ResearchAI</h1>
         </div>
 
         <div class="topbar-actions">
@@ -152,15 +152,16 @@
 
       <section class="hero-panel">
         <div class="hero-content">
-          <div class="hero-badge">Not a chatbot. A structured report demo.</div>
-          <h2>One question in. A consulting-grade report out.</h2>
+          <div class="hero-badge">Public beta - local demo reports</div>
+          <h2>Receive a professional report from one clear question.</h2>
           <p>
-            ResearchAI turns your input into a structured sample report with executive summaries, market maps,
-            risk analysis, competitor tables, estimates and action plans.
+            ResearchAI creates a structured sample document with an executive summary,
+            findings, risks, source guidance and next actions.
           </p>
 
           <form class="research-command" id="researchForm" novalidate>
             <div class="input-group">
+              <span class="workflow-label">Describe the decision, topic or plan you need to clarify</span>
               <label class="input-shell" for="researchInput">
                 <span class="input-icon" aria-hidden="true">Q</span>
                 <input
@@ -174,11 +175,11 @@
                   required
                 />
               </label>
-              <p class="input-hint" id="inputHint">Press Enter or click Generate. Demo mode: sample reports are generated locally and do not use live web research.</p>
+              <p class="input-hint" id="inputHint">Demo mode: this creates a local sample report from templates. It does not perform live research.</p>
               <p class="input-error" id="inputError" role="alert" hidden></p>
             </div>
             <button class="accent-btn large" type="submit" id="generateBtn">
-              <span class="btn-label">Generate Full Report</span>
+              <span class="btn-label">Generate Report</span>
               <span class="btn-spinner" aria-hidden="true"></span>
             </button>
           </form>
@@ -192,7 +193,8 @@
           </div>
         </div>
 
-        <div class="report-preview" aria-label="Live report preview" aria-live="polite">
+        <div class="report-preview" aria-label="Executive report preview" aria-live="polite">
+          <div class="preview-kicker">Page 1 - Executive report preview</div>
           <div class="preview-header">
             <div>
               <strong id="previewTitle">Your Research Topic</strong>
@@ -201,18 +203,32 @@
             <div class="score-ring" id="previewScore" aria-label="Demo estimate preview">Demo</div>
           </div>
 
-          <div class="preview-lines" aria-hidden="true">
-            <span></span>
-            <span></span>
-            <span></span>
-            <span></span>
+          <div class="preview-summary">
+            <strong>Executive Summary</strong>
+            <p>A concise opening brief that frames the topic, explains the decision context and separates useful direction from assumptions.</p>
           </div>
 
           <div class="preview-grid" id="previewGrid">
-            <div><strong id="previewMarket">$2.4B</strong><span>Market potential</span></div>
-            <div><strong id="previewCompetitors">12</strong><span>Competitors</span></div>
-            <div><strong id="previewDemand">Strong</strong><span>Demand signal</span></div>
-            <div><strong id="previewWindow">9 mo</strong><span>Launch window</span></div>
+            <div>
+              <span>Key Findings</span>
+              <p>Main signals and trade-offs organized for quick review.</p>
+              <strong id="previewDemand">Strong</strong>
+            </div>
+            <div>
+              <span>Market Context</span>
+              <p>Illustrative market estimate and category assumptions.</p>
+              <strong id="previewMarket">$2.4B</strong>
+            </div>
+            <div>
+              <span>Risks &amp; Alternatives</span>
+              <p>Known limits, competing options and assumptions to verify.</p>
+              <strong id="previewCompetitors">12</strong>
+            </div>
+            <div>
+              <span>Next Actions</span>
+              <p>Practical steps for turning the report into decisions.</p>
+              <strong id="previewWindow">9 mo</strong>
+            </div>
           </div>
         </div>
       </section>
