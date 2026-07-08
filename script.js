@@ -366,65 +366,197 @@ function analyzePrompt(prompt) {
   };
 }
 
-/* -- AI service layer -- */
+/* -- AI request, prompt, and response architecture -- */
 
-class GenerationError extends Error {
-  constructor(code, message) {
+class AIProviderError extends Error {
+  constructor(type, message, details) {
     super(message);
-    this.name = "GenerationError";
-    this.code = code;
+    this.name = type;
+    this.type = type;
+    this.details = details || null;
+  }
+}
+
+class ProviderUnavailable extends AIProviderError {
+  constructor(message, details) {
+    super("ProviderUnavailable", message || "Provider unavailable.", details);
+  }
+}
+
+class InvalidConfiguration extends AIProviderError {
+  constructor(message, details) {
+    super("InvalidConfiguration", message || "Invalid provider configuration.", details);
+  }
+}
+
+class RateLimited extends AIProviderError {
+  constructor(message, details) {
+    super("RateLimited", message || "Provider rate limit reached.", details);
+  }
+}
+
+class Unauthorized extends AIProviderError {
+  constructor(message, details) {
+    super("Unauthorized", message || "Provider authorization failed.", details);
+  }
+}
+
+class InvalidResponse extends AIProviderError {
+  constructor(message, details) {
+    super("InvalidResponse", message || "Provider returned an invalid response.", details);
+  }
+}
+
+class NetworkError extends AIProviderError {
+  constructor(message, details) {
+    super("NetworkError", message || "Network request failed.", details);
+  }
+}
+
+class Timeout extends AIProviderError {
+  constructor(message, details) {
+    super("Timeout", message || "Provider request timed out.", details);
+  }
+}
+
+class UnknownError extends AIProviderError {
+  constructor(message, details) {
+    super("UnknownError", message || "Unknown generation error.", details);
   }
 }
 
 const generationErrorMessages = {
-  provider_unavailable: "This report provider is not available yet. Demo Mode is still available.",
-  invalid_configuration: "Report generation is not configured correctly. Please switch back to Demo Mode.",
-  generation_failed: "ResearchAI could not generate the report. Please try again."
+  ProviderUnavailable: "This report provider is not available yet. Demo Mode is still available.",
+  InvalidConfiguration: "Report generation is not configured correctly. Please switch back to Demo Mode.",
+  RateLimited: "ResearchAI is receiving too many requests right now. Please try again shortly.",
+  Unauthorized: "ResearchAI is not authorized to use this provider yet. Please switch back to Demo Mode.",
+  InvalidResponse: "ResearchAI could not read the provider response. Please try again.",
+  NetworkError: "ResearchAI could not reach the report provider. Please check your connection and try again.",
+  Timeout: "The report provider took too long to respond. Please try again.",
+  UnknownError: "ResearchAI could not generate the report. Please try again."
 };
+
+function createAIRequest(userPrompt, mode = researchAIConfig.generationMode) {
+  const prompt = userPrompt.trim();
+  const intent = detectReportIntent(prompt);
+  const industry = detectIndustrySignal(prompt);
+
+  return {
+    userPrompt: prompt,
+    intent,
+    industry,
+    reportType: intent,
+    mode,
+    metadata: {
+      category: detectCategory(prompt),
+      topic: extractTopic(prompt),
+      source: "ResearchAI frontend",
+      apiEndpoint: researchAIConfig.api.generateEndpoint
+    },
+    createdAt: new Date().toISOString()
+  };
+}
+
+function buildResearchPrompt(request) {
+  return [
+    "Create a professional research report.",
+    `User prompt: ${request.userPrompt}`,
+    `Intent: ${request.intent}`,
+    `Industry: ${request.industry}`,
+    "Return structured report data compatible with the ResearchAI report schema.",
+    "Separate facts, assumptions, estimates, source guidance, risks, and recommendations."
+  ].join("\n");
+}
+
+function buildStartupPrompt(request) {
+  return `${buildResearchPrompt(request)}\nFocus on startup validation, ICP, willingness to pay, MVP scope, risks, and next experiments.`;
+}
+
+function buildBusinessPlanPrompt(request) {
+  return `${buildResearchPrompt(request)}\nFocus on operating model, go-to-market, unit economics, cost structure, milestones, and launch plan.`;
+}
+
+function buildComparisonPrompt(request) {
+  return `${buildResearchPrompt(request)}\nFocus on decision criteria, alternatives, trade-offs, switching costs, risks, and recommendation logic.`;
+}
+
+function buildLearningPrompt(request) {
+  return `${buildResearchPrompt(request)}\nFocus on milestones, weekly practice, projects, feedback loops, assessment, and visible skill progress.`;
+}
+
+function buildInvestmentPrompt(request) {
+  return `${buildResearchPrompt(request)}\nFocus on thesis, catalysts, risks, financial logic, evidence gaps, and non-advisory limitations.`;
+}
+
+function buildGeneralPrompt(request) {
+  return `${buildResearchPrompt(request)}\nFocus on decision clarity, useful structure, assumptions, source categories, and practical next actions.`;
+}
+
+function buildPromptForRequest(request) {
+  const builders = {
+    startup_validation: buildStartupPrompt,
+    business_plan: buildBusinessPlanPrompt,
+    competitor_comparison: buildComparisonPrompt,
+    learning_plan: buildLearningPrompt,
+    investment_thesis: buildInvestmentPrompt,
+    market_analysis: buildResearchPrompt,
+    product_strategy: buildResearchPrompt,
+    general_research: buildGeneralPrompt
+  };
+  return (builders[request.reportType] || buildGeneralPrompt)(request);
+}
+
+function parseProviderResponse(providerResponse) {
+  if (!providerResponse || typeof providerResponse !== "object") {
+    throw new InvalidResponse("Provider response must be a report data object.");
+  }
+
+  if (providerResponse.prompt && providerResponse.title && Array.isArray(providerResponse.findings)) {
+    return providerResponse;
+  }
+
+  // TODO: Convert future AI JSON/text responses into the existing ResearchAI report data structure.
+  throw new InvalidResponse("Provider response is not compatible with the current report schema.");
+}
+
+function normalizeProviderError(error) {
+  if (error instanceof AIProviderError) return error;
+  if (error?.name === "AbortError") return new Timeout(error.message, error);
+  if (/network|fetch/i.test(error?.message || "")) return new NetworkError(error.message, error);
+  return new UnknownError(error?.message, error);
+}
 
 class ReportProvider {
   constructor(config = {}) {
     this.config = config;
   }
 
-  generateReport() {
-    throw new GenerationError("provider_unavailable", "Provider has not implemented report generation.");
+  async generate() {
+    throw new ProviderUnavailable("Provider has not implemented report generation.");
   }
 
-  createPreview() {
-    throw new GenerationError("provider_unavailable", "Provider has not implemented preview generation.");
+  createPreview(request) {
+    return analyzePrompt(request.userPrompt);
   }
 }
 
 class DemoProvider extends ReportProvider {
-  async generateReport(prompt) {
-    return analyzePrompt(prompt);
-  }
-
-  createPreview(prompt) {
-    return analyzePrompt(prompt);
+  async generate(request) {
+    return analyzePrompt(request.userPrompt);
   }
 }
 
 class GeminiProvider extends ReportProvider {
-  async generateReport() {
-    // TODO: Implement Gemini generation through a backend/API boundary. Do not expose API keys in this frontend.
-    throw new GenerationError("provider_unavailable", "GeminiProvider is a placeholder.");
-  }
-
-  createPreview(prompt) {
-    return analyzePrompt(prompt);
+  async generate() {
+    // TODO: Implement Gemini through the Vercel API provider layer. No browser API keys.
+    throw new ProviderUnavailable("GeminiProvider is a placeholder.");
   }
 }
 
 class OpenRouterProvider extends ReportProvider {
-  async generateReport() {
-    // TODO: Implement OpenRouter generation through a backend/API boundary. Do not expose API keys in this frontend.
-    throw new GenerationError("provider_unavailable", "OpenRouterProvider is a placeholder.");
-  }
-
-  createPreview(prompt) {
-    return analyzePrompt(prompt);
+  async generate() {
+    // TODO: Implement OpenRouter through the Vercel API provider layer. No browser API keys.
+    throw new ProviderUnavailable("OpenRouterProvider is a placeholder.");
   }
 }
 
@@ -438,43 +570,34 @@ class AIService {
     };
   }
 
-  async requestServerGeneration(prompt, mode) {
-    // TODO: Use this helper when AI Mode is enabled. Demo Mode intentionally does not call the backend.
-    const response = await fetch(this.config.api.generateEndpoint, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ prompt, mode })
-    });
-    const payload = await response.json();
-    if (!response.ok || payload.ok === false) {
-      throw new GenerationError("generation_failed", payload.error?.message || "Server generation failed.");
-    }
-    return payload.report;
-  }
-
-  getProvider() {
-    const mode = this.config.generationMode;
+  getProvider(mode = this.config.generationMode) {
     const provider = this.providers[mode];
     if (!provider) {
-      throw new GenerationError("invalid_configuration", `Unknown generation mode: ${mode}`);
+      throw new InvalidConfiguration(`Unknown generation mode: ${mode}`);
     }
     return provider;
   }
 
-  async generateReport(prompt) {
+  createRequest(prompt, mode = this.config.generationMode) {
+    return createAIRequest(prompt, mode);
+  }
+
+  async generate(request) {
     try {
-      return await this.getProvider().generateReport(prompt);
+      const provider = this.getProvider(request.mode);
+      const rawResponse = await provider.generate(request);
+      return parseProviderResponse(rawResponse, request);
     } catch (err) {
-      if (err instanceof GenerationError) throw err;
-      throw new GenerationError("generation_failed", err.message);
+      throw normalizeProviderError(err);
     }
   }
 
   createPreview(prompt) {
+    const request = this.createRequest(prompt);
     try {
-      return this.getProvider().createPreview(prompt);
+      return this.getProvider(request.mode).createPreview(request);
     } catch {
-      return new DemoProvider(this.config.providers.demo).createPreview(prompt);
+      return new DemoProvider(this.config.providers.demo).createPreview(request);
     }
   }
 }
@@ -488,8 +611,18 @@ class ReportController {
     return this.aiService.createPreview(prompt);
   }
 
+  buildRequest(prompt) {
+    return this.aiService.createRequest(prompt);
+  }
+
+  buildPrompt(request) {
+    return buildPromptForRequest(request);
+  }
+
   async generateReport(prompt) {
-    return await this.aiService.generateReport(prompt);
+    const request = this.buildRequest(prompt);
+    request.metadata.promptPreview = this.buildPrompt(request);
+    return await this.aiService.generate(request);
   }
 
   async generateAndSaveReport(prompt) {
@@ -501,10 +634,8 @@ const aiService = new AIService(researchAIConfig);
 const reportController = new ReportController(aiService);
 
 function getGenerationErrorMessage(error) {
-  if (error instanceof GenerationError && generationErrorMessages[error.code]) {
-    return generationErrorMessages[error.code];
-  }
-  return generationErrorMessages.generation_failed;
+  const normalized = normalizeProviderError(error);
+  return generationErrorMessages[normalized.type] || generationErrorMessages.UnknownError;
 }
 
 function handleGenerationError(error) {
