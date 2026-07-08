@@ -1,4 +1,4 @@
-const { getProvider } = require("./_providers");
+const { getProvider, ProviderError } = require("./_providers");
 const { sendError, sendOk } = require("./_responses");
 
 const MAX_PROMPT_LENGTH = 500;
@@ -18,15 +18,17 @@ function validateGenerateRequest(body) {
     return "Request body must be valid JSON.";
   }
 
-  if (typeof body.prompt !== "string" || !body.prompt.trim()) {
+  const prompt = body.prompt || body.userPrompt;
+
+  if (typeof prompt !== "string" || !prompt.trim()) {
     return "Prompt is required.";
   }
 
-  if (body.prompt.trim().length < 8) {
+  if (prompt.trim().length < 8) {
     return "Prompt must be at least 8 characters.";
   }
 
-  if (body.prompt.length > MAX_PROMPT_LENGTH) {
+  if (prompt.length > MAX_PROMPT_LENGTH) {
     return `Prompt must be ${MAX_PROMPT_LENGTH} characters or fewer.`;
   }
 
@@ -37,7 +39,31 @@ function validateGenerateRequest(body) {
   return "";
 }
 
-module.exports = function handler(request, response) {
+function createGenerateRequest(body, mode) {
+  const userPrompt = (body.userPrompt || body.prompt).trim();
+  const createdAt = body.createdAt || new Date().toISOString();
+
+  return {
+    userPrompt,
+    intent: body.intent || "general_research",
+    industry: body.industry || "general",
+    reportType: body.reportType || body.intent || "general_research",
+    mode,
+    metadata: body.metadata && typeof body.metadata === "object" ? body.metadata : {},
+    createdAt
+  };
+}
+
+function sendProviderError(response, error) {
+  if (error instanceof ProviderError) {
+    sendError(response, error.statusCode, error.code, error.message);
+    return;
+  }
+
+  sendError(response, 500, "provider_error", "The report provider could not complete the request.");
+}
+
+module.exports = async function handler(request, response) {
   if (request.method !== "POST") {
     response.setHeader("Allow", "POST");
     sendError(response, 400, "method_not_allowed", "Use POST to generate a report.");
@@ -55,6 +81,21 @@ module.exports = function handler(request, response) {
   const provider = getProvider(mode);
   if (!provider) {
     sendError(response, 400, "invalid_provider", `Unknown generation mode: ${mode}`);
+    return;
+  }
+
+  if (mode === "gemini") {
+    try {
+      const report = await provider.generate(createGenerateRequest(body, mode));
+      sendOk(response, {
+        status: "generated",
+        service: "ResearchAI API",
+        mode,
+        report
+      });
+    } catch (error) {
+      sendProviderError(response, error);
+    }
     return;
   }
 
