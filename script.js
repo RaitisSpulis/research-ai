@@ -558,6 +558,9 @@ function normalizeAiSection(section, index) {
     rows: Array.isArray(section.table?.rows) ? section.table.rows : section.rows,
     scenarios: Array.isArray(section.scenarios) ? section.scenarios : undefined,
     recommendations: Array.isArray(section.recommendations) ? section.recommendations : undefined,
+    steps: Array.isArray(section.steps) ? section.steps : undefined,
+    scorecards: Array.isArray(section.scorecards) ? section.scorecards : undefined,
+    contrarian: section.contrarian && typeof section.contrarian === "object" ? section.contrarian : undefined,
     finalRecommendation: section.finalRecommendation
   };
 }
@@ -611,7 +614,7 @@ function mergeAiTextIntoReport(providerResponse, request) {
     model: providerResponse.model || "",
     createdAt: providerResponse.createdAt || new Date().toISOString(),
     executive: htmlFromAiText(aiText),
-    thesis: "Live AI draft generated from the prompt. Treat it as a structured first draft and verify important claims with source review.",
+    thesis: "Live AI draft generated from the prompt. Treat it as a structured first draft and verify material claims with source review.",
     sources: [
       ["Recommended source review", "Verify the live draft against primary sources, official documents, market reports, and customer evidence."],
       ["Citation status", "This AI Mode draft does not yet include verified citations in the report renderer."],
@@ -619,7 +622,7 @@ function mergeAiTextIntoReport(providerResponse, request) {
     ],
     limitations: [
       ["Live AI draft", "This report used the Gemini backend route, but source verification is not active yet."],
-      ["Needs evidence review", "Use the recommendations and source guidance as a starting point before making important decisions."],
+      ["Needs evidence review", "Use the recommendations and source guidance as a starting point before making material decisions."],
       ["Saved locally", "The report is saved in this browser workspace."]
     ]
   };
@@ -1019,7 +1022,7 @@ function getCategoryContent(category, topic, seed) {
       ["Decision framework", "Explicit assumptions, risks, and next steps."]
     ],
     disadvantages: [
-      ["Data limitations", "Illustrative estimates should be verified with primary sources before important decisions."],
+      ["Data limitations", "Illustrative estimates should be verified with primary sources before material decisions."],
       ["Local variance", "Market conditions vary significantly by geography."],
       ["Execution risk", "Analysis quality depends on input specificity."]
     ]
@@ -1638,9 +1641,9 @@ function getDynamicAdvantages(intent, industry, topic) {
 
 function getDynamicDisadvantages(intent, industry) {
   return [
-    ["Evidence limits", "The report may not use live sources, so important claims still need verification."],
+    ["Evidence limits", "The report does not include live source verification, so material claims still need verification."],
     ["Prompt sensitivity", `The ${intentLabel(intent)} draft improves when the audience, geography, budget, or constraints are specific.`],
-    ["Industry nuance", `${industryLabel(industry)} details may require local or expert validation before decisions are made.`]
+    ["Industry nuance", `${industryLabel(industry)} details require local or expert validation before decisions are made.`]
   ];
 }
 
@@ -1743,38 +1746,58 @@ function getFinalRecommendation(data) {
   const recommendations = {
     buy_vs_rent: {
       decision: "Test first",
-      confidence: "Medium",
+      confidence: "68%",
       biggestAssumption: "The conclusion depends on Riga sale prices, mortgage terms, rent inflation and how long you will hold the property.",
       nextStep: "Collect 10 comparable sale prices, 10 rent listings, two mortgage offers and estimated building costs before choosing.",
-      deadline: "Make the decision after a two-week evidence sprint, then revisit every six months until 2030."
+      deadline: "Make the decision after a two-week evidence sprint, then revisit every six months until 2030.",
+      reverseConditions: ["Mortgage rate exceeds 5.0%", "Holding period falls below 6 years", "Purchase price exceeds verified rent-equivalent threshold"],
+      confidenceLimits: ["No verified sale comparables", "Mortgage terms not confirmed", "Maintenance costs estimated"],
+      confidenceUpside: "Confidence rises to 86% after sale comps, rent comps and two mortgage offers.",
+      riskIfWrong: "Buying too early traps capital in a low-liquidity asset while renting stays cheaper."
     },
     agency: {
       decision: "Test first",
-      confidence: "Medium-high",
+      confidence: "72%",
       biggestAssumption: "Enough Latvian businesses have repetitive workflows worth at least EUR 300-1,000 per month in saved time or revenue.",
       nextStep: "Interview 15 target businesses and sell one fixed-scope pilot before building a broad agency offer.",
-      deadline: "Run a 30-day validation sprint and decide go/no-go by the end of month one."
+      deadline: "Run a 30-day validation sprint and decide go/no-go by the end of month one.",
+      reverseConditions: ["Fewer than 5 of 15 interviews reveal paid workflow pain", "No pilot buyer accepts EUR 1,000+", "Delivery requires custom work with no repeatable playbook"],
+      confidenceLimits: ["No customer interviews completed", "Willingness to pay untested", "Delivery margin unknown"],
+      confidenceUpside: "Confidence rises to 88% after one paid pilot and five documented workflow audits.",
+      riskIfWrong: "The agency becomes low-margin custom implementation work with weak recurring revenue."
     },
     saas_gtm: {
       decision: "Go, narrowly",
-      confidence: "Medium",
+      confidence: "70%",
       biggestAssumption: "Dental clinics feel an urgent admin or revenue problem and will pay for one clear workflow rather than a broad AI toolkit.",
       nextStep: "Interview 15 clinic owners, launch one landing page and test a single offer around missed calls, no-shows or admin automation.",
-      deadline: "Validate channel and willingness to pay within 30 days before building more features."
+      deadline: "Validate channel and willingness to pay within 30 days before building more features.",
+      reverseConditions: ["Fewer than 5 clinics report weekly workflow pain", "Landing page conversion stays below 5%", "Clinics reject EUR 99-299/mo pricing"],
+      confidenceLimits: ["Clinic buying process unknown", "Onboarding friction untested", "Churn risk unmeasured"],
+      confidenceUpside: "Confidence rises to 85% after 5 paid pilots and one repeatable onboarding flow.",
+      riskIfWrong: "The product becomes a broad AI toolkit with high education cost and weak retention."
     },
     local_hospitality: {
       decision: "Wait until location evidence is strong",
-      confidence: "Medium",
+      confidence: "64%",
       biggestAssumption: "Daily foot traffic, rent, labor and repeat purchase economics support a premium concept.",
       nextStep: "Observe three candidate streets at peak times, price the menu, and model break-even orders per day.",
-      deadline: "Do not sign a lease until the site passes a two-week demand and cost test."
+      deadline: "Do not sign a lease until the site passes a two-week demand and cost test.",
+      reverseConditions: ["Break-even requires more than 180 orders/day", "Rent exceeds 10% of conservative revenue", "Repeat purchase test underperforms target pricing"],
+      confidenceLimits: ["No foot traffic count", "Lease terms unknown", "Ticket size untested"],
+      confidenceUpside: "Confidence rises to 82% after foot traffic counts, supplier quotes and a paid pop-up test.",
+      riskIfWrong: "A lease locks the business into fixed costs before repeat demand is proven."
     },
     capital_allocation: {
       decision: "Choose staged allocation",
-      confidence: "Medium",
+      confidence: "69%",
       biggestAssumption: "The best choice depends on risk tolerance, time horizon, income stability and ability to operate an active business.",
       nextStep: "Split the decision into safety reserve, passive investment and one small active experiment rather than committing all EUR 20,000 at once.",
-      deadline: "Decide allocation rules this week, then review after 90 days."
+      deadline: "Decide allocation rules this week, then review after 90 days.",
+      reverseConditions: ["Emergency reserve is incomplete", "Agency experiment fails to produce paid demand", "Property requires excessive leverage or repair risk"],
+      confidenceLimits: ["Personal runway unknown", "Risk tolerance not quantified", "Property cash flow unverified"],
+      confidenceUpside: "Confidence rises to 84% after defining runway, comparing ETF allocation and testing one paid agency offer.",
+      riskIfWrong: "Capital gets concentrated into an illiquid or time-heavy path before risk is understood."
     },
     learning: {
       decision: "Go with milestones",
@@ -1792,10 +1815,14 @@ function getFinalRecommendation(data) {
     },
     general: {
       decision: "Test first",
-      confidence: "Medium",
+      confidence: "66%",
       biggestAssumption: "The prompt contains enough context for a useful first draft, but the evidence still needs verification.",
       nextStep: "Collect the three strongest pieces of evidence that would change the recommendation.",
-      deadline: "Run a focused evidence review before committing resources."
+      deadline: "Run a focused evidence review before committing resources.",
+      reverseConditions: ["Primary evidence contradicts the core assumption", "Cost exceeds the acceptable threshold", "Decision-maker or buyer urgency is absent"],
+      confidenceLimits: ["Limited prompt context", "No verified primary evidence", "Decision threshold not quantified"],
+      confidenceUpside: "Confidence rises after primary evidence confirms the main assumption.",
+      riskIfWrong: "The user commits resources before the strongest uncertainty is resolved."
     }
   };
   return recommendations[archetype] || recommendations.general;
@@ -1870,7 +1897,7 @@ function dynamicRecommendations(archetype, data) {
     saas_gtm: [
       recommendation("Interview 15 dental clinic owners or office managers.", "The product must map to a painful clinic workflow, not generic AI enthusiasm.", "Proceed if at least 5 report missed calls, no-shows or admin work worth EUR 300+/mo.", "Change ICP if clinics see the problem as annoying but not worth paying for."),
       recommendation("Launch one landing page with one workflow promise.", "A narrow promise tests positioning before product complexity grows.", "Continue if targeted traffic converts to calls or waitlist signups above 5-8%.", "Rewrite positioning if visitors do not understand the outcome in 10 seconds."),
-      recommendation("Test founder-led sales before paid acquisition.", "Dental SaaS may require trust, education and workflow proof.", "Proceed if clinics book demos from direct outreach.", "Delay scaling if demos require heavy custom explanation.")
+      recommendation("Test founder-led sales before paid acquisition.", "Dental SaaS requires trust, education and workflow proof.", "Proceed if clinics book demos from direct outreach.", "Delay scaling if demos require heavy custom explanation.")
     ],
     local_hospitality: [
       recommendation("Count foot traffic at candidate locations for two weeks.", "A coffee shop is a location economics problem before it is a brand problem.", "Proceed if conservative order volume covers rent, labor and waste.", "Walk away if the model only works with peak-hour optimism."),
@@ -1891,17 +1918,189 @@ function dynamicRecommendations(archetype, data) {
   return items[archetype] || items.general;
 }
 
+function decisionScorecards(archetype) {
+  const cards = {
+    buy_vs_rent: [
+      { option: "Buy now", scores: [
+        ["Cash flow", 5, "Monthly cost starts higher until equity accumulation offsets the gap."],
+        ["Liquidity", 3, "Down payment and transaction costs reduce flexibility."],
+        ["Long-term wealth", 8, "Ownership wins after the holding period crosses the break-even line."],
+        ["Flexibility", 2, "Moving or changing plans becomes expensive."],
+        ["Risk", 6, "Repair, rate and resale risks remain material."]
+      ] },
+      { option: "Rent until 2030", scores: [
+        ["Cash flow", 7, "Lower upfront burden preserves optionality."],
+        ["Liquidity", 9, "Capital remains available for investments or emergencies."],
+        ["Long-term wealth", 5, "Wealth outcome depends on disciplined investing of the saved capital."],
+        ["Flexibility", 9, "Relocation and timing remain easy."],
+        ["Risk", 5, "Rent inflation and missed appreciation are the main risks."]
+      ] }
+    ],
+    agency: [
+      { option: "AI automation agency", scores: [
+        ["Customer urgency", 7, "Workflow pain exists if interviews uncover repeated time loss."],
+        ["Acquisition difficulty", 5, "Trust selling requires direct outreach and proof."],
+        ["Margin potential", 7, "Margins work after delivery becomes repeatable."],
+        ["Scaling constraint", 4, "Founder delivery capacity caps early growth."],
+        ["Speed to revenue", 8, "Paid pilots can close before software is built."]
+      ] }
+    ],
+    saas_gtm: [
+      { option: "Dental AI SaaS", scores: [
+        ["Willingness to pay", 6, "Clinics pay when the workflow maps to revenue or admin hours."],
+        ["Onboarding friction", 4, "Clinic workflows require trust and setup help."],
+        ["Retention driver", 7, "Recurring workflow pain supports retention if the product runs weekly."],
+        ["Acquisition economics", 5, "Founder-led sales works first; paid acquisition waits."],
+        ["Churn risk", 6, "Churn rises if the tool feels generic or hard to adopt."]
+      ] }
+    ],
+    local_hospitality: [
+      { option: "Specialty coffee shop", scores: [
+        ["Location economics", 5, "The lease and foot traffic decide the model."],
+        ["Ticket size", 6, "Premium pricing works after repeat demand is proven."],
+        ["Operating leverage", 4, "Labor and rent create fixed-cost pressure."],
+        ["Seasonality", 5, "Weather and tourism can shift daily demand."],
+        ["Break-even risk", 6, "Orders per day must be validated before lease commitment."]
+      ] }
+    ],
+    capital_allocation: [
+      { option: "AI agency", scores: [["Expected return", 8, "Highest upside if sales work."], ["Downside", 5, "Loss is capped if capital exposure is small."], ["Liquidity", 8, "Cash stays flexible during validation."], ["Volatility", 6, "Revenue is uneven early."], ["Concentration risk", 6, "Time and focus concentrate in one active bet."]] },
+      { option: "ETFs", scores: [["Expected return", 6, "Passive diversified return with no operating burden."], ["Downside", 6, "Market drawdowns remain possible."], ["Liquidity", 9, "Capital remains accessible."], ["Volatility", 5, "Portfolio value moves with markets."], ["Concentration risk", 8, "Diversification reduces single-asset risk."]] },
+      { option: "Rental apartment", scores: [["Expected return", 5, "Return depends on price, rent and leverage."], ["Downside", 4, "Repairs and vacancy damage cash flow."], ["Liquidity", 2, "Exit is slow and transaction-heavy."], ["Volatility", 6, "Reported prices move slower than markets."], ["Concentration risk", 3, "One asset dominates the allocation."]] }
+    ]
+  };
+  return cards[archetype] || [{ option: "Test first", scores: [["Decision clarity", 7, "The next evidence sprint can resolve the largest uncertainty."], ["Cost control", 8, "Testing limits downside before commitment."], ["Speed", 7, "A one-week sprint creates usable evidence quickly."]] }];
+}
+
+function reasoningChains(archetype) {
+  const chains = {
+    buy_vs_rent: [
+      "Mortgage offer received",
+      "Monthly ownership cost calculated",
+      "Comparable rent collected",
+      "Principal repayment and opportunity cost modeled",
+      "Break-even holding period identified",
+      "Buy only if holding period exceeds break-even by 18+ months"
+    ],
+    agency: [
+      "Interview identifies repeated workflow pain",
+      "Time lost per week quantified",
+      "Budget owner confirms willingness to pay",
+      "Fixed-scope pilot sold",
+      "Delivery steps documented",
+      "Scale only after repeatable margin appears"
+    ],
+    saas_gtm: [
+      "Clinic workflow pain selected",
+      "Buyer and trigger defined",
+      "Landing page promise tested",
+      "Demo calls booked from direct outreach",
+      "Paid pilots activated",
+      "Build product depth after retention signal"
+    ],
+    local_hospitality: [
+      "Candidate street selected",
+      "Foot traffic counted by daypart",
+      "Ticket size and menu margin modeled",
+      "Rent and staffing cost loaded",
+      "Break-even orders per day calculated",
+      "Lease signed only after demand clears threshold"
+    ],
+    capital_allocation: [
+      "Emergency reserve protected",
+      "Passive allocation baseline defined",
+      "AI agency experiment capped",
+      "Property cash-flow stress tested",
+      "Downside compared across options",
+      "Capital staged by evidence quality"
+    ]
+  };
+  return chains[archetype] || ["Input defined", "Assumption stated", "Evidence collected", "Threshold tested", "Recommendation updated"];
+}
+
+function missingInformationImpact(archetype) {
+  const info = {
+    buy_vs_rent: [
+      ["Second mortgage offer", "High", "High"],
+      ["10 local sale comps", "High", "High"],
+      ["Building maintenance reserve", "Medium", "Medium"],
+      ["Expected holding period", "High", "High"]
+    ],
+    agency: [
+      ["15 customer interviews", "High", "High"],
+      ["Paid pilot acceptance", "High", "High"],
+      ["Delivery time per workflow", "Medium", "Medium"],
+      ["Decision-maker identity", "High", "Medium"]
+    ],
+    saas_gtm: [
+      ["Clinic willingness to pay", "High", "High"],
+      ["Landing page conversion", "High", "Medium"],
+      ["Onboarding time", "Medium", "Medium"],
+      ["Churn trigger interviews", "Medium", "Medium"]
+    ],
+    local_hospitality: [
+      ["Foot traffic counts", "High", "High"],
+      ["Lease terms", "High", "High"],
+      ["Supplier quotes", "Medium", "Medium"],
+      ["Pop-up repeat purchase", "High", "Medium"]
+    ],
+    capital_allocation: [
+      ["Personal runway", "High", "High"],
+      ["Risk tolerance", "High", "Medium"],
+      ["Paid agency demand", "High", "High"],
+      ["Property cash-flow estimate", "Medium", "Medium"]
+    ]
+  };
+  return info[archetype] || [["Primary evidence", "High", "High"], ["Cost threshold", "Medium", "Medium"], ["Decision owner", "Medium", "Medium"]];
+}
+
+function contrarianAnalysis(archetype) {
+  const views = {
+    buy_vs_rent: ["A buyer would argue that Riga property appreciation offsets early cash-flow pain.", "That criticism changes the conclusion only if verified purchase price and mortgage terms create a break-even under six years."],
+    agency: ["A skeptic would argue that AI agencies commoditize quickly.", "That criticism changes the conclusion if pilots cannot become repeatable playbooks with recurring retainers."],
+    saas_gtm: ["A skeptic would argue dentists do not want another tool.", "That criticism changes the conclusion if onboarding takes more than one short setup session or the workflow lacks weekly usage."],
+    local_hospitality: ["A skeptic would argue coffee shops fail from fixed costs, not lack of brand.", "That criticism changes the conclusion unless foot traffic and break-even orders clear the conservative case."],
+    capital_allocation: ["A skeptic would argue ETFs beat active experiments after adjusting for time and failure risk.", "That criticism changes the conclusion if the agency test fails to produce paid demand inside 90 days."]
+  };
+  const view = views[archetype] || ["A skeptic would argue the current evidence is too thin.", "That criticism changes the conclusion if primary evidence contradicts the decision threshold."];
+  return { criticism: view[0], effect: view[1] };
+}
+
+function dynamicRiskItems(archetype) {
+  const risks = {
+    buy_vs_rent: [
+      { title: "Liquidity lock-in", text: "Transaction costs and down payment reduce flexibility before 2030." },
+      { title: "Rate and income shock", text: "Mortgage affordability weakens if payments rise or income falls." },
+      { title: "Maintenance surprise", text: "Repairs and building fund costs can erase expected savings." },
+      { title: "Opportunity cost", text: "Capital tied in the apartment cannot fund higher-return alternatives." }
+    ],
+    general: [
+      { title: "Evidence gap", text: "The strongest assumption remains unverified." },
+      { title: "Execution risk", text: "The plan depends on follow-through, not research quality alone." },
+      { title: "Cost drift", text: "Time and money can expand before the decision threshold is reached." },
+      { title: "False certainty", text: "A polished report still needs primary evidence before commitment." }
+    ]
+  };
+  return risks[archetype] || risks.general;
+}
+
 function buildDynamicSections(data) {
   const archetype = getReportArchetype(data);
   const final = getFinalRecommendation(data);
-  const commonRisks = (data.risks || []).slice(0, 4).map(([title, text]) => ({ title, text }));
+  const commonRisks = dynamicRiskItems(archetype);
   const evidence = dynamicEvidence(archetype);
   const recs = dynamicRecommendations(archetype, data);
+  const scorecards = decisionScorecards(archetype);
+  const chain = reasoningChains(archetype);
+  const missingInfo = missingInformationImpact(archetype);
+  const contrarian = contrarianAnalysis(archetype);
 
   const sectionSets = {
     buy_vs_rent: [
       makeSection("Decision Summary", "State the decision and current recommendation.", "paragraphs", { paragraphs: [`ResearchAI recommends <strong>${final.decision}</strong>. Buying versus renting in Riga should be decided by verified local costs, holding period and liquidity needs rather than headline property optimism.`] }),
       makeSection("Key Assumptions", "Make the decision variables explicit.", "reasoning", { items: [reasoningItem("The prompt compares buying now with renting until 2030.", "Mortgage rates, rent inflation and maintenance costs materially affect the result.", "The answer can change with only a few local inputs.", "Collect local comps before choosing.", "A lower mortgage rate or unusually cheap apartment would improve the buy case.")] }),
+      makeSection("Decision Scorecard", "Score each option with explanations.", "scorecard", { scorecards }),
+      makeSection("Reasoning Chain", "Show the logic from input to recommendation.", "reasoning_chain", { steps: chain }),
       makeSection("Buy vs Rent Scenarios", "Compare the realistic paths.", "scenarios", { scenarios: [
         { name: "Buy now", summary: "Useful if price, financing and holding period are attractive.", assumptions: ["Stable income", "Long holding period", "Maintenance buffer"], threshold: "Buy only if total monthly ownership cost and opportunity cost beat renting under conservative assumptions." },
         { name: "Rent until 2030", summary: "Useful if flexibility and liquidity are valuable.", assumptions: ["Rent remains manageable", "Capital can be invested elsewhere", "No urgent lifestyle need to own"], threshold: "Rent if ownership requires optimistic appreciation to win." },
@@ -1911,15 +2110,17 @@ function buildDynamicSections(data) {
         ["Purchase price + fees", "Sets the initial hurdle", "Sale comps, taxes, notary and broker costs"],
         ["Mortgage payment", "Determines monthly affordability", "Two bank offers"],
         ["Rent avoided", "Main ownership benefit", "Comparable rent listings"],
-        ["Maintenance and HOA", "Often underestimated", "Building costs and reserve fund"],
+        ["Maintenance and HOA", "Frequently underestimated", "Building costs and reserve fund"],
         ["Holding period", "Spreads transaction costs", "Personal plan through 2030"]
       ])),
       makeSection("Sensitivity Analysis", "Identify what changes the answer.", "items", { items: [
         { title: "Interest rate sensitivity", text: "A higher rate weakens buying unless price falls enough to compensate." },
         { title: "Rent inflation sensitivity", text: "Fast rent growth improves buying, but only if ownership costs are controlled." },
-        { title: "Liquidity sensitivity", text: "If you may need cash or mobility, renting retains option value." }
+        { title: "Liquidity sensitivity", text: "Cash needs or mobility needs strengthen the case for renting." }
       ] }),
       makeSection("Risks", "Name the downside cases.", "items", { items: commonRisks }),
+      makeSection("Contrarian View", "Test the recommendation against the strongest objection.", "contrarian", { contrarian }),
+      makeSection("Missing Information Impact", "Prioritize evidence by decision impact.", "missing_info", { rows: missingInfo }),
       makeSection("Recommended Next Steps", "Make the decision testable.", "recommendations", { recommendations: recs }),
       makeSection("Evidence To Verify", "List exact evidence to collect.", "evidence", { items: evidence }),
       makeSection("Final Recommendation", "Close with a decision.", "final", { finalRecommendation: final })
@@ -1931,7 +2132,9 @@ function buildDynamicSections(data) {
         { title: "Buyer", text: "Target the person who owns time, cost or revenue leakage, not a casual AI enthusiast." },
         { title: "Trigger", text: "Prioritize workflows that already cause missed revenue, slow response time or manual admin overload." }
       ] }),
-      makeSection("Workflow Pain Map", "Make the analysis concrete.", "reasoning", { items: [reasoningItem("Small businesses often lose time in admin, sales follow-up and reporting.", "They will pay only when the pain is frequent and measurable.", "The offer should sell time saved or revenue recovered, not AI implementation.", "Audit five workflows before pitching.", "Weak pain or unclear ownership should stop the agency idea.")] }),
+      makeSection("Workflow Pain Map", "Make the analysis concrete.", "reasoning", { items: [reasoningItem("Small businesses lose time in admin, sales follow-up and reporting.", "They will pay only when the pain is frequent and measurable.", "The offer should sell time saved or revenue recovered, not AI implementation.", "Audit five workflows before pitching.", "Weak pain or unclear ownership should stop the agency idea.")] }),
+      makeSection("Decision Scorecard", "Evaluate the agency as a business model.", "scorecard", { scorecards }),
+      makeSection("Reasoning Chain", "Show how evidence turns into go/no-go.", "reasoning_chain", { steps: chain }),
       makeSection("Offer Design", "Package one sellable service.", "table", table(["Offer", "What it includes", "Success condition"], [
         ["Workflow audit", "Map current tools, time lost and automation opportunities", "Customer identifies one painful workflow"],
         ["Pilot implementation", "Build one automation with human review and handoff", "Pilot saves time or recovers revenue"],
@@ -1948,6 +2151,8 @@ function buildDynamicSections(data) {
         { title: "Local proof", text: "Use one case study from the same market before broad content marketing." },
         { title: "Partner channel", text: "Accountants, web agencies or IT support firms can introduce workflow problems." }
       ] }),
+      makeSection("Contrarian View", "Test the recommendation against the strongest objection.", "contrarian", { contrarian }),
+      makeSection("Missing Information Impact", "Prioritize evidence by decision impact.", "missing_info", { rows: missingInfo }),
       makeSection("Validation Plan", "Concrete next steps.", "recommendations", { recommendations: recs }),
       makeSection("Evidence To Verify", "List exact evidence to collect.", "evidence", { items: evidence }),
       makeSection("Final Recommendation", "Close with a decision.", "final", { finalRecommendation: final })
@@ -1959,8 +2164,10 @@ function buildDynamicSections(data) {
         { title: "Pain threshold", text: "At least several hours per week lost or measurable missed revenue." },
         { title: "Buying trigger", text: "Staff overload, missed calls, no-shows or slow patient follow-up." }
       ] }),
-      makeSection("Pain Points", "Translate pain into product demand.", "reasoning", { items: [reasoningItem("Dental teams often run on phone, calendar and manual admin workflows.", "They will not buy generic AI; they buy fewer missed bookings or less admin burden.", "The first product promise should be narrow and measurable.", "Validate one workflow before building a toolkit.", "If clinics will not quantify the problem, the GTM should pause.")] }),
-      makeSection("Channel Strategy", "Select first channels.", "table", table(["Channel", "Why it may work", "Test"], [
+      makeSection("Pain Points", "Translate pain into product demand.", "reasoning", { items: [reasoningItem("Dental teams run on phone, calendar and manual admin workflows.", "They will not buy generic AI; they buy fewer missed bookings or less admin burden.", "The first product promise should be narrow and measurable.", "Validate one workflow before building a toolkit.", "If clinics will not quantify the problem, the GTM should pause.")] }),
+      makeSection("Decision Scorecard", "Evaluate the SaaS GTM bet.", "scorecard", { scorecards }),
+      makeSection("Reasoning Chain", "Show the path from pain to retention.", "reasoning_chain", { steps: chain }),
+      makeSection("Channel Strategy", "Select first channels.", "table", table(["Channel", "Why it works", "Test"], [
         ["Direct outreach", "Specific clinic problems can be personalized", "50 clinics, 10 replies, 5 calls"],
         ["Dental communities", "Trust and peer proof matter", "Post one practical workflow teardown"],
         ["Referral partners", "IT/web vendors already serve clinics", "Secure two partner conversations"]
@@ -1973,9 +2180,11 @@ function buildDynamicSections(data) {
       ])),
       makeSection("Competitor Alternatives", "Map substitutes.", "table", table(["Alternative", "Why clinics use it", "Weakness"], [
         ["Manual admin", "Known and low cash cost", "Time loss and inconsistency"],
-        ["Practice management software", "System of record", "May not solve AI workflow layer"],
+        ["Practice management software", "System of record", "Leaves the AI workflow layer unresolved"],
         ["Generic AI tools", "Flexible", "No clinic-specific workflow ownership"]
       ])),
+      makeSection("Contrarian View", "Test the recommendation against the strongest objection.", "contrarian", { contrarian }),
+      makeSection("Missing Information Impact", "Prioritize evidence by decision impact.", "missing_info", { rows: missingInfo }),
       makeSection("30-Day Launch Plan", "Make GTM executable.", "recommendations", { recommendations: recs }),
       makeSection("Evidence To Verify", "List exact evidence to collect.", "evidence", { items: evidence }),
       makeSection("Final Recommendation", "Close with a decision.", "final", { finalRecommendation: final })
@@ -1983,6 +2192,8 @@ function buildDynamicSections(data) {
     local_hospitality: [
       makeSection("Decision Summary", "Decide whether to proceed.", "paragraphs", { paragraphs: [`Recommendation: <strong>${final.decision}</strong>. A specialty coffee shop should be treated as a location and unit-economics decision before brand or design decisions.`] }),
       makeSection("Demand Hypothesis", "Define what must be true.", "reasoning", { items: [reasoningItem("A coffee shop depends on repeat local behavior.", "Foot traffic and repeat purchase matter more than broad category growth.", "The concept works only if daily volume covers rent, labor and waste.", "Test the location and menu before signing a lease.", "Weak repeat demand should stop the project.")] }),
+      makeSection("Decision Scorecard", "Evaluate the shop as a local operating model.", "scorecard", { scorecards }),
+      makeSection("Reasoning Chain", "Show how site economics drive the decision.", "reasoning_chain", { steps: chain }),
       makeSection("Location Economics", "Show the model inputs.", "table", table(["Input", "Why it matters", "Evidence needed"], [
         ["Daily orders", "Main revenue driver", "Foot traffic counts and competitor observation"],
         ["Average order value", "Determines revenue per visit", "Menu pricing and bundle tests"],
@@ -1995,6 +2206,8 @@ function buildDynamicSections(data) {
         { name: "Base case", summary: "Steady morning and weekend demand.", assumptions: ["Reliable repeat customers", "Clear premium positioning"], threshold: "Requires daily orders to cover fixed cost with margin." },
         { name: "Upside", summary: "Strong local habit and brand pull.", assumptions: ["High repeat rate", "Events or partnerships"], threshold: "Use only after proof, not before lease." }
       ] }),
+      makeSection("Contrarian View", "Test the recommendation against the strongest objection.", "contrarian", { contrarian }),
+      makeSection("Missing Information Impact", "Prioritize evidence by decision impact.", "missing_info", { rows: missingInfo }),
       makeSection("Validation Plan", "Concrete next steps.", "recommendations", { recommendations: recs }),
       makeSection("Evidence To Verify", "List exact evidence to collect.", "evidence", { items: evidence }),
       makeSection("Final Recommendation", "Close with a decision.", "final", { finalRecommendation: final })
@@ -2006,25 +2219,33 @@ function buildDynamicSections(data) {
         ["ETFs", "Diversified passive exposure", "Market volatility", "You value simplicity and liquidity"],
         ["Rental apartment", "Asset ownership and rental income", "Concentration and repair risk", "You have enough capital and local deal evidence"]
       ])),
+      makeSection("Decision Scorecard", "Evaluate each capital option.", "scorecard", { scorecards }),
+      makeSection("Reasoning Chain", "Show how capital moves from safety to upside.", "reasoning_chain", { steps: chain }),
       makeSection("Financial Logic", "Use explicit assumptions.", "table", table(["Variable", "Question to answer", "Decision effect"], [
         ["Runway", "How much cash must remain untouched?", "Sets investable amount"],
-        ["Time horizon", "When might you need the money?", "Controls ETF/property suitability"],
+        ["Time horizon", "When do you need the money?", "Controls ETF/property suitability"],
         ["Agency capacity", "Can you sell and deliver?", "Controls active-business upside"],
-        ["Property leverage", "Can EUR 20,000 safely support purchase costs?", "May rule out property"]
+        ["Property leverage", "Can EUR 20,000 safely support purchase costs?", "Can rule out property"]
       ])),
       makeSection("Sensitivity Analysis", "What changes the answer.", "items", { items: [
-        { title: "If you need liquidity", text: "ETFs and cash reserve become more attractive than property." },
+        { title: "Liquidity need", text: "ETFs and cash reserve become more attractive than property." },
         { title: "If you can sell services", text: "A small AI agency experiment can have asymmetric learning and revenue upside." },
         { title: "If property requires leverage stress", text: "Rental apartment should wait until capital and deal evidence improve." }
       ] }),
+      makeSection("Contrarian View", "Test the recommendation against the strongest objection.", "contrarian", { contrarian }),
+      makeSection("Missing Information Impact", "Prioritize evidence by decision impact.", "missing_info", { rows: missingInfo }),
       makeSection("90-Day Test Plan", "Concrete next steps.", "recommendations", { recommendations: recs }),
       makeSection("Evidence To Verify", "List exact evidence to collect.", "evidence", { items: evidence }),
       makeSection("Final Recommendation", "Close with a decision.", "final", { finalRecommendation: final })
     ],
     general: [
       makeSection("Decision Summary", "Frame the decision.", "paragraphs", { paragraphs: [`Recommendation: <strong>${final.decision}</strong>. The report should be used to identify what is already clear, what is assumed and what evidence would change the conclusion.`] }),
-      makeSection("Reasoning Snapshot", "Show transparent reasoning.", "reasoning", { items: [reasoningItem("The prompt asks for structured guidance.", "Some context is missing and should be verified.", "A first draft is useful if it leads to specific evidence collection.", "Run a short validation sprint.", "New evidence could change the recommendation.")] }),
+      makeSection("Reasoning Snapshot", "Show transparent reasoning.", "reasoning", { items: [reasoningItem("The prompt asks for structured guidance.", "Some context is missing and should be verified.", "A first draft is useful if it leads to specific evidence collection.", "Run a short validation sprint.", "New evidence updates the recommendation.")] }),
+      makeSection("Decision Scorecard", "Score the current decision quality.", "scorecard", { scorecards }),
+      makeSection("Reasoning Chain", "Show the logic from question to test.", "reasoning_chain", { steps: chain }),
       makeSection("Risks", "Name the downside cases.", "items", { items: commonRisks }),
+      makeSection("Contrarian View", "Test the recommendation against the strongest objection.", "contrarian", { contrarian }),
+      makeSection("Missing Information Impact", "Prioritize evidence by decision impact.", "missing_info", { rows: missingInfo }),
       makeSection("Recommendations", "Concrete next steps.", "recommendations", { recommendations: recs }),
       makeSection("Evidence To Verify", "List exact evidence to collect.", "evidence", { items: evidence }),
       makeSection("Final Recommendation", "Close with a decision.", "final", { finalRecommendation: final })
@@ -2049,6 +2270,10 @@ function renderDynamicSection(section) {
     body = `<ul class="signal-list">${(section.items || []).map(item => signalItem(item.title, item.text)).join("")}</ul>`;
   } else if (section.layoutType === "reasoning") {
     body = `<div class="insight-grid">${(section.items || []).map(item => insightCard("Observed", item.observed) + insightCard("Assumed", item.assumed) + insightCard("Implication", item.implication) + insightCard("Recommendation", item.recommendation) + insightCard("What would change this", item.change)).join("")}</div>`;
+  } else if (section.layoutType === "reasoning_chain") {
+    body = `<div class="timeline reasoning-chain">${(section.steps || []).map((step, i) => `<div><span>${i + 1}</span><strong>${escapeHtml(step)}</strong>${i < (section.steps || []).length - 1 ? "<p>Feeds the next decision step.</p>" : "<p>Produces the current recommendation.</p>"}</div>`).join("")}</div>`;
+  } else if (section.layoutType === "scorecard") {
+    body = `<div class="insight-grid">${(section.scorecards || []).map(card => insightCard(card.option, (card.scores || []).map(([label, score, why]) => [`${label}: ${score}/10`, why]))).join("")}</div>`;
   } else if (section.layoutType === "table") {
     const headers = section.headers || [];
     const rows = section.rows || [];
@@ -2063,14 +2288,22 @@ function renderDynamicSection(section) {
     body = `<div class="timeline">${(section.recommendations || []).map((item, i) => `<div><span>${i + 1}</span><strong>${escapeHtml(item.action)}</strong><p><b>Why:</b> ${escapeHtml(item.why)}</p><p><b>Success:</b> ${escapeHtml(item.success)}</p><p><b>Failure:</b> ${escapeHtml(item.failure)}</p></div>`).join("")}</div>`;
   } else if (section.layoutType === "evidence") {
     body = `<ul class="signal-list">${(section.items || []).map(item => signalItem(item, "Collect and verify this before making the decision.")).join("")}</ul>`;
+  } else if (section.layoutType === "missing_info") {
+    body = `<div class="table-wrap"><table><thead><tr><th>Missing evidence</th><th>Expected impact</th><th>Chance of changing recommendation</th></tr></thead><tbody>${(section.rows || []).map(row => `<tr>${row.map(cell => `<td>${escapeHtml(cell)}</td>`).join("")}</tr>`).join("")}</tbody></table></div>`;
+  } else if (section.layoutType === "contrarian") {
+    body = `<div class="insight-grid">${insightCard("Strongest objection", section.contrarian?.criticism || "The current recommendation depends on unverified evidence.")}${insightCard("Does it change the conclusion?", section.contrarian?.effect || "It changes the conclusion only if evidence crosses the stated thresholds.")}</div>`;
   } else if (section.layoutType === "final") {
     const final = section.finalRecommendation || {};
     body = `<div class="confidence-grid">
       ${insightCard("Decision", final.decision || "Test first")}
-      ${insightCard("Confidence", final.confidence || "Medium")}
+      ${insightCard("Confidence", final.confidence || "66%")}
       ${insightCard("Biggest assumption", final.biggestAssumption || "The strongest assumption still needs verification.")}
+      ${insightCard("This recommendation reverses if", final.reverseConditions || ["Primary evidence contradicts the core assumption."])}
+      ${insightCard("Limited because", final.confidenceLimits || ["Primary evidence has not been collected."])}
+      ${insightCard("Confidence improves when", final.confidenceUpside || "The highest-impact evidence is verified.")}
       ${insightCard("Next verification step", final.nextStep || "Collect the evidence most likely to change the decision.")}
       ${insightCard("Time horizon", final.deadline || "Set a deadline before committing resources.")}
+      ${insightCard("Risk if wrong", final.riskIfWrong || "Resources move before uncertainty is reduced.")}
     </div>`;
   }
 
@@ -2210,7 +2443,7 @@ function buildReportHTML(data) {
       <div class="section-title">
         <div>
           <p class="section-kicker">Risks & Assumptions</p>
-          <h2>What could change the conclusion</h2>
+          <h2>What changes the conclusion</h2>
         </div>
         <span>Needs review</span>
       </div>
@@ -2285,7 +2518,7 @@ function buildReportHTML(data) {
         <span>Evidence guidance</span>
       </div>
       <div class="insight-grid">${sourcesHtml}</div>
-      <p class="report-disclaimer">This report suggests source categories only. Verify important claims against primary sources before acting.</p>
+      <p class="report-disclaimer">This report suggests source categories only. Verify material claims against primary sources before acting.</p>
     </section>
 
     <section class="report-section confidence-section" id="confidence">
@@ -2464,7 +2697,7 @@ function renderRecentReports() {
       <span>${escapeHtml(initials(report.title))}</span>
       <div>
         <strong>${escapeHtml(report.title)}</strong>
-        <p>${escapeHtml(formatReportType(report))} - 12 sections - ${relativeTime(report.createdAt)}${report.pinned ? " - pinned" : ""}</p>
+        <p>${escapeHtml(formatReportType(report))} - ${Array.isArray(report.sections) ? report.sections.length : 12} sections - ${relativeTime(report.createdAt)}${report.pinned ? " - pinned" : ""}</p>
       </div>
       <div class="report-row-actions">
         <button type="button" data-action="open" aria-label="Open ${escapeHtml(report.title)}">Open</button>
@@ -2695,7 +2928,7 @@ function openPanel(name) {
       </div>
       <div class="settings-group">
         <h3>About</h3>
-        <p>ResearchAI Public Beta. Reports may use live AI or local fallback generation. Live source verification is not active yet.</p>
+        <p>ResearchAI Public Beta. Reports use live AI or local fallback generation. Live source verification is not active yet.</p>
         <p class="settings-version">Version 1.0.0-beta</p>
       </div>`;
     on(document.getElementById("clearHistoryBtn"), "click", () => {
@@ -2729,7 +2962,7 @@ function renderHistoryPanel(favoritesOnly) {
       <div class="empty-state">
         <div class="empty-icon" aria-hidden="true">${favoritesOnly ? "*" : "H"}</div>
         <h3>${favoritesOnly ? "No pinned reports yet" : "No saved reports yet"}</h3>
-        <p>${favoritesOnly ? "Pin important reports to keep them at the top of your workspace." : "Generate a report and it will be saved here automatically."}</p>
+        <p>${favoritesOnly ? "Pin priority reports to keep them at the top of your workspace." : "Generate a report and it will be saved here automatically."}</p>
       </div>`;
     return;
   }

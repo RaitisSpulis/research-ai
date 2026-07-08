@@ -48,6 +48,9 @@ function buildGeminiPrompt(request) {
     `Report type: ${request.reportType || "general_research"}`,
     "The report structure must adapt to the user question. Do not force a universal 12-section shell.",
     "Avoid unsupported market sizes. If numbers are illustrative, label assumptions and show how to validate them.",
+    "Write like a senior analyst. Every section must reduce uncertainty and push toward a decision.",
+    "Do not use filler language such as may, might, could, potentially, generally, usually, often, important or consider.",
+    "Include decision scorecards with explained scores, reasoning chains, contrarian analysis and missing-information impact.",
     "Every recommendation must include action, why, success condition and failure condition.",
     "End with a clear final recommendation: Go, No-Go, Wait, Test first, Choose option A or Choose option B.",
     "Use this JSON schema:",
@@ -59,20 +62,27 @@ function buildGeminiPrompt(request) {
           id: "short-kebab-case-id",
           title: "string",
           purpose: "string",
-          layoutType: "paragraphs | items | table | scenarios | recommendations | evidence | final",
+          layoutType: "paragraphs | items | table | scenarios | recommendations | evidence | reasoning_chain | scorecard | missing_info | contrarian | final",
           paragraphs: ["string"],
           items: [{ title: "string", text: "string" }],
           table: { headers: ["string"], rows: [["string"]] },
           scenarios: [{ name: "string", summary: "string", assumptions: ["string"], threshold: "string" }],
-          recommendations: [{ action: "string", why: "string", success: "string", failure: "string" }]
+          recommendations: [{ action: "string", why: "string", success: "string", failure: "string" }],
+          steps: ["string"],
+          scorecards: [{ option: "string", scores: [["dimension", 7, "explanation"]] }],
+          contrarian: { criticism: "string", effect: "string" }
         }
       ],
       finalRecommendation: {
         decision: "Go | No-Go | Wait | Test first | Choose option A | Choose option B",
-        confidence: "Low | Medium | High",
+        confidence: "percentage string",
         biggestAssumption: "string",
         nextStep: "string",
-        deadline: "string"
+        deadline: "string",
+        reverseConditions: ["string"],
+        confidenceLimits: ["string"],
+        confidenceUpside: "string",
+        riskIfWrong: "string"
       },
       limitations: ["string"],
       evidenceToVerify: ["string"]
