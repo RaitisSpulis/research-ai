@@ -5,9 +5,10 @@ const USAGE_KEY = "researchai_usage_v1";
 const FREE_LIMIT = 5;
 
 const researchAIConfig = {
-  generationMode: "demo",
+  generationMode: "gemini",
   api: {
-    generateEndpoint: "/api/generate"
+    generateEndpoint: "/api/generate",
+    timeoutMs: 30000
   },
   providers: {
     demo: {},
@@ -506,7 +507,44 @@ function buildPromptForRequest(request) {
   return (builders[request.reportType] || buildGeneralPrompt)(request);
 }
 
-function parseProviderResponse(providerResponse) {
+function htmlFromAiText(text) {
+  return escapeHtml(text)
+    .split(/\n{2,}/)
+    .map(part => part.trim())
+    .filter(Boolean)
+    .slice(0, 3)
+    .join("<br><br>");
+}
+
+function mergeAiTextIntoReport(providerResponse, request) {
+  const base = analyzePrompt(request.userPrompt);
+  const aiText = String(providerResponse.text || providerResponse.content || "").trim();
+  if (!aiText) {
+    throw new InvalidResponse("AI provider response did not include report text.");
+  }
+
+  return {
+    ...base,
+    mode: request.mode,
+    provider: providerResponse.provider || request.mode,
+    model: providerResponse.model || "",
+    createdAt: providerResponse.createdAt || new Date().toISOString(),
+    executive: htmlFromAiText(aiText),
+    thesis: "Live AI draft generated from the prompt. Treat it as a structured first draft and verify important claims with source review.",
+    sources: [
+      ["Recommended source review", "Verify the live draft against primary sources, official documents, market reports, and customer evidence."],
+      ["Citation status", "This AI Mode draft does not yet include verified citations in the report renderer."],
+      ["Demo safeguards", "ResearchAI keeps assumptions and source guidance visible until connected source verification is active."]
+    ],
+    limitations: [
+      ["Live AI draft", "This report used the Gemini backend route, but source verification is not active yet."],
+      ["Needs evidence review", "Use the recommendations and source guidance as a starting point before making important decisions."],
+      ["Saved locally", "The report is saved in this browser workspace like Demo Mode reports."]
+    ]
+  };
+}
+
+function parseProviderResponse(providerResponse, request) {
   if (!providerResponse || typeof providerResponse !== "object") {
     throw new InvalidResponse("Provider response must be a report data object.");
   }
@@ -515,7 +553,10 @@ function parseProviderResponse(providerResponse) {
     return providerResponse;
   }
 
-  // TODO: Convert future AI JSON/text responses into the existing ResearchAI report data structure.
+  if (providerResponse.text || providerResponse.content) {
+    return mergeAiTextIntoReport(providerResponse, request);
+  }
+
   throw new InvalidResponse("Provider response is not compatible with the current report schema.");
 }
 
@@ -524,6 +565,18 @@ function normalizeProviderError(error) {
   if (error?.name === "AbortError") return new Timeout(error.message, error);
   if (/network|fetch/i.test(error?.message || "")) return new NetworkError(error.message, error);
   return new UnknownError(error?.message, error);
+}
+
+function providerErrorFromApi(error, status) {
+  const code = error?.code || "";
+  const message = error?.message || "Report provider failed.";
+
+  if (status === 401 || code === "unauthorized") return new Unauthorized(message, error);
+  if (status === 429 || code === "rate_limited") return new RateLimited(message, error);
+  if (code === "timeout") return new Timeout(message, error);
+  if (code === "invalid_response") return new InvalidResponse(message, error);
+  if (code === "invalid_request" || code === "invalid_provider") return new InvalidConfiguration(message, error);
+  return new UnknownError(message, error);
 }
 
 class ReportProvider {
@@ -547,9 +600,33 @@ class DemoProvider extends ReportProvider {
 }
 
 class GeminiProvider extends ReportProvider {
-  async generate() {
-    // TODO: Implement Gemini through the Vercel API provider layer. No browser API keys.
-    throw new ProviderUnavailable("GeminiProvider is a placeholder.");
+  async generate(request) {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), this.config.timeoutMs || 30000);
+
+    try {
+      const response = await fetch(this.config.generateEndpoint, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        signal: controller.signal,
+        body: JSON.stringify(request)
+      });
+      const payload = await response.json().catch(() => null);
+
+      if (!response.ok || payload?.ok === false) {
+        throw providerErrorFromApi(payload?.error, response.status);
+      }
+
+      if (!payload?.report) {
+        throw new InvalidResponse("AI response did not include a report.");
+      }
+
+      return payload.report;
+    } catch (err) {
+      throw normalizeProviderError(err);
+    } finally {
+      clearTimeout(timeout);
+    }
   }
 }
 
@@ -565,7 +642,7 @@ class AIService {
     this.config = config;
     this.providers = {
       demo: new DemoProvider(config.providers.demo),
-      gemini: new GeminiProvider(config.providers.gemini),
+      gemini: new GeminiProvider({ ...config.providers.gemini, ...config.api }),
       openrouter: new OpenRouterProvider(config.providers.openrouter)
     };
   }
@@ -588,7 +665,17 @@ class AIService {
       const rawResponse = await provider.generate(request);
       return parseProviderResponse(rawResponse, request);
     } catch (err) {
-      throw normalizeProviderError(err);
+      const normalized = normalizeProviderError(err);
+      if (request.mode !== "demo") {
+        const demoRequest = { ...request, mode: "demo" };
+        const demoReport = parseProviderResponse(await this.providers.demo.generate(demoRequest), demoRequest);
+        demoReport.aiFallback = true;
+        demoReport.fallbackReason = normalized.type;
+        demoReport.provider = "demo";
+        demoReport.mode = "demo";
+        return demoReport;
+      }
+      throw normalized;
     }
   }
 
@@ -1988,7 +2075,9 @@ function startResearch() {
 
   showInputError("");
   currentPrompt = prompt;
-  els.loadingPrompt.textContent = `Demo mode: building a local sample report for "${prompt}". No web research is being performed.`;
+  els.loadingPrompt.textContent = researchAIConfig.generationMode === "gemini"
+    ? `Preparing a live AI report for "${prompt}". If live AI is unavailable, ResearchAI will show a local demo report instead.`
+    : `Demo mode: building a local sample report for "${prompt}". No web research is being performed.`;
 
   showView("loading");
 
@@ -2036,7 +2125,11 @@ function startResearch() {
           incrementUsage();
           renderReport(saved);
           showView("report");
-          showToast("Report generated successfully");
+          if (saved.aiFallback) {
+            showToast("Live AI is temporarily unavailable. Showing a demo report instead.", "warn");
+          } else {
+            showToast("Report generated successfully");
+          }
         } catch (err) {
           handleGenerationError(err);
         }
