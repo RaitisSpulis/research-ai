@@ -4,6 +4,31 @@ const STORAGE_KEY = "researchai_reports_v1";
 const USAGE_KEY = "researchai_usage_v1";
 const FREE_LIMIT = 5;
 
+function readImportMetaDev() {
+  try {
+    return Boolean(new Function("return import.meta.env && import.meta.env.DEV;")());
+  } catch {
+    return false;
+  }
+}
+
+function isDeveloperMode() {
+  const runtimeLocation = typeof location !== "undefined" ? location : globalThis.window?.location;
+  const hostname = runtimeLocation?.hostname || "";
+  const nodeEnv = typeof process !== "undefined" ? process.env?.NODE_ENV : "";
+
+  return (
+    hostname === "localhost" ||
+    hostname === "127.0.0.1" ||
+    readImportMetaDev() ||
+    nodeEnv === "development"
+  );
+}
+
+if (typeof module !== "undefined" && module.exports) {
+  module.exports.isDeveloperMode = isDeveloperMode;
+}
+
 const researchAIConfig = {
   generationMode: "gemini",
   api: {
@@ -59,9 +84,11 @@ const els = {
   previewCompetitors: document.getElementById("previewCompetitors"),
   previewDemand: document.getElementById("previewDemand"),
   previewWindow: document.getElementById("previewWindow"),
+  usageTitle: document.getElementById("usageTitle"),
   usageText: document.getElementById("usageText"),
   usageBar: document.getElementById("usageBar"),
   usageFill: document.getElementById("usageFill"),
+  devModeBadge: document.getElementById("devModeBadge"),
   topicCloud: document.getElementById("topicCloud"),
   refreshTopics: document.getElementById("refreshTopics"),
   toast: document.getElementById("toast"),
@@ -191,7 +218,8 @@ function getReports() {
 }
 
 function saveReports(reports) {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(sortReports(reports.map(normalizeReport)).slice(0, 50)));
+  const sorted = sortReports(reports.map(normalizeReport));
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(isDeveloperMode() ? sorted : sorted.slice(0, 50)));
 }
 
 function normalizeReport(report) {
@@ -216,6 +244,8 @@ function sortReports(reports) {
 }
 
 function getUsage() {
+  if (isDeveloperMode()) return 0;
+
   try {
     const data = JSON.parse(localStorage.getItem(USAGE_KEY));
     const now = new Date();
@@ -228,6 +258,11 @@ function getUsage() {
 }
 
 function incrementUsage() {
+  if (isDeveloperMode()) {
+    updateUsageUI();
+    return 0;
+  }
+
   const now = new Date();
   const month = `${now.getFullYear()}-${now.getMonth()}`;
   const count = getUsage() + 1;
@@ -238,6 +273,26 @@ function incrementUsage() {
 
 function updateUsageUI() {
   if (!els.usageText || !els.usageBar || !els.usageFill) return;
+  const devMode = isDeveloperMode();
+
+  if (els.usageTitle) els.usageTitle.textContent = devMode ? "Developer Mode" : "Free Workspace";
+  if (els.devModeBadge) {
+    els.devModeBadge.hidden = !devMode;
+    els.devModeBadge.textContent = "DEV Unlimited";
+  }
+  els.usageBar.hidden = devMode;
+  els.usageBar.closest(".usage-card")?.classList.toggle("is-dev", devMode);
+  document.querySelectorAll("[data-coming-soon='Pro subscription']").forEach(button => {
+    button.hidden = devMode;
+  });
+
+  if (devMode) {
+    els.usageText.textContent = "Unlimited reports";
+    els.usageBar.setAttribute("aria-valuenow", "0");
+    els.usageFill.style.width = "0%";
+    return;
+  }
+
   const used = getUsage();
   els.usageText.textContent = `${used} of ${FREE_LIMIT} reports used this month`;
   els.usageBar.setAttribute("aria-valuenow", String(used));
@@ -2810,9 +2865,11 @@ function startResearch() {
     return;
   }
 
-  if (getUsage() >= FREE_LIMIT) {
-    showToast("Free report limit reached (5/month). Paid plans are not active yet.", "warn");
-    return;
+  if (!isDeveloperMode()) {
+    if (getUsage() >= FREE_LIMIT) {
+      showToast("Free report limit reached (5/month). Paid plans are not active yet.", "warn");
+      return;
+    }
   }
 
   showInputError("");
