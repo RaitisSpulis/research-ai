@@ -33,6 +33,7 @@ const researchAIConfig = {
   generationMode: "gemini",
   api: {
     generateEndpoint: "/api/generate",
+    checkoutEndpoint: "/api/create-checkout-session",
     timeoutMs: 30000
   },
   providers: {
@@ -102,6 +103,7 @@ const els = {
   appSidebar: document.getElementById("appSidebar"),
   openReportBtn: document.getElementById("openReportBtn"),
   startFreeBtn: document.getElementById("startFreeBtn"),
+  proCheckoutBtn: document.getElementById("proCheckoutBtn"),
   copyReport: document.getElementById("copyReport"),
   shareReport: document.getElementById("shareReport"),
   exportPdf: document.getElementById("exportPdf"),
@@ -282,10 +284,6 @@ function updateUsageUI() {
   }
   els.usageBar.hidden = devMode;
   els.usageBar.closest(".usage-card")?.classList.toggle("is-dev", devMode);
-  document.querySelectorAll("[data-coming-soon='Pro subscription']").forEach(button => {
-    button.hidden = devMode;
-  });
-
   if (devMode) {
     els.usageText.textContent = "Unlimited reports";
     els.usageBar.setAttribute("aria-valuenow", "0");
@@ -2738,6 +2736,52 @@ function showToast(message, type) {
   }, 3200);
 }
 
+function setCheckoutLoading(isLoading) {
+  if (!els.proCheckoutBtn) return;
+  els.proCheckoutBtn.disabled = isLoading;
+  els.proCheckoutBtn.textContent = isLoading ? "Opening Stripe..." : "Upgrade to Pro";
+}
+
+function getCheckoutStatus() {
+  try {
+    return new URLSearchParams(window.location.search).get("checkout");
+  } catch {
+    return "";
+  }
+}
+
+function handleCheckoutReturn() {
+  const status = getCheckoutStatus();
+  if (status === "success") {
+    showToast("Payment received. Pro account activation will be completed after account setup.");
+  } else if (status === "cancelled") {
+    showToast("Checkout cancelled. You can upgrade to Pro anytime.", "info");
+  }
+}
+
+async function startProCheckout() {
+  if (!els.proCheckoutBtn) return;
+  setCheckoutLoading(true);
+
+  try {
+    const response = await fetch(researchAIConfig.api.checkoutEndpoint, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" }
+    });
+    const payload = await response.json().catch(() => null);
+
+    if (!response.ok || payload?.ok === false || !payload?.url) {
+      throw new Error(payload?.error?.message || "Checkout could not be started.");
+    }
+
+    window.location.href = payload.url;
+  } catch (error) {
+    console.error("[ResearchAI] checkout failed:", error);
+    showToast("Checkout is temporarily unavailable. Please try again soon.", "warn");
+    setCheckoutLoading(false);
+  }
+}
+
 function showInputError(message) {
   els.inputError.textContent = message;
   els.inputError.hidden = !message;
@@ -2911,7 +2955,7 @@ function startResearch() {
 
   if (!isDeveloperMode()) {
     if (getUsage() >= FREE_LIMIT) {
-      showToast("Free report limit reached (5/month). Paid plans are not active yet.", "warn");
+      showToast("Free report limit reached. Upgrade to Pro for a higher monthly report limit.", "warn");
       return;
     }
   }
@@ -3020,12 +3064,15 @@ function openPanel(name) {
   } else if (name === "favorites") {
     renderHistoryPanel(true);
   } else if (name === "settings") {
+    const resetUsageControl = isDeveloperMode()
+      ? `<button class="ghost-btn danger-btn" type="button" id="resetUsageBtn">Reset usage counter</button>`
+      : "";
     els.panelBody.innerHTML = `
       <div class="settings-group">
         <h3>Workspace</h3>
         <p>Reports are stored locally in this browser. No saved report data is sent to a server.</p>
         <button class="ghost-btn" type="button" id="clearHistoryBtn">Clear report history</button>
-        <button class="ghost-btn danger-btn" type="button" id="resetUsageBtn">Reset usage counter</button>
+        ${resetUsageControl}
       </div>
       <div class="settings-group">
         <h3>About</h3>
@@ -3040,11 +3087,13 @@ function openPanel(name) {
       showToast("History cleared");
       closePanel();
     });
-    on(document.getElementById("resetUsageBtn"), "click", () => {
-      localStorage.removeItem(USAGE_KEY);
-      updateUsageUI();
-      showToast("Usage counter reset");
-    });
+    if (isDeveloperMode()) {
+      on(document.getElementById("resetUsageBtn"), "click", () => {
+        localStorage.removeItem(USAGE_KEY);
+        updateUsageUI();
+        showToast("Usage counter reset");
+      });
+    }
   }
 
   if (!els.panelOverlay) return;
@@ -3354,6 +3403,8 @@ function bindEvents() {
     showToast("Free plan: 5 reports per month");
   });
 
+  on(els.proCheckoutBtn, "click", startProCheckout);
+
   on(els.copyReport, "click", copyReport);
   on(els.shareReport, "click", shareReport);
   on(els.exportPdf, "click", exportPdf);
@@ -3426,6 +3477,8 @@ function init() {
     if (reports.length) {
       currentReport = reports[0];
     }
+
+    handleCheckoutReturn();
 
     setInterval(rotatePlaceholder, 2800);
   } catch (err) {
