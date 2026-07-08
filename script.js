@@ -1735,6 +1735,49 @@ function insightCard(title, text) {
   return `<div><strong>${escapeHtml(title)}</strong><p>${text}</p></div>`;
 }
 
+function scorecardCard(card) {
+  const rows = (card.scores || []).map(([label, score, why]) => `
+    <li>
+      <div>
+        <strong>${escapeHtml(label)}</strong>
+        <p>${escapeHtml(why)}</p>
+      </div>
+      <b>${escapeHtml(score)} <span>/ 10</span></b>
+    </li>`).join("");
+
+  return `
+    <article class="scorecard-card">
+      <h3>${escapeHtml(card.option)}</h3>
+      <ul>${rows}</ul>
+    </article>`;
+}
+
+function recommendationStep(item, index) {
+  return `
+    <article class="recommendation-card">
+      <span>${index + 1}</span>
+      <div>
+        <h3>${escapeHtml(item.action)}</h3>
+        <dl>
+          <div><dt>Why</dt><dd>${escapeHtml(item.why)}</dd></div>
+          <div><dt>Success</dt><dd>${escapeHtml(item.success)}</dd></div>
+          <div><dt>Failure</dt><dd>${escapeHtml(item.failure)}</dd></div>
+        </dl>
+      </div>
+    </article>`;
+}
+
+function reasoningStep(step, index, total) {
+  return `
+    <article>
+      <span>${index + 1}</span>
+      <div>
+        <strong>${escapeHtml(step)}</strong>
+        <p>${index < total - 1 ? "Leads to the next decision input." : "Produces the current recommendation."}</p>
+      </div>
+    </article>`;
+}
+
 function signalItem(title, text) {
   return `<li><strong>${escapeHtml(title)}</strong><span>${escapeHtml(text)}</span></li>`;
 }
@@ -2326,9 +2369,10 @@ function renderDynamicSection(section) {
   } else if (section.layoutType === "reasoning") {
     body = `<div class="insight-grid">${(section.items || []).map(item => insightCard("Observed", item.observed) + insightCard("Assumed", item.assumed) + insightCard("Implication", item.implication) + insightCard("Recommendation", item.recommendation) + insightCard("What would change this", item.change)).join("")}</div>`;
   } else if (section.layoutType === "reasoning_chain") {
-    body = `<div class="timeline reasoning-chain">${(section.steps || []).map((step, i) => `<div><span>${i + 1}</span><strong>${escapeHtml(step)}</strong>${i < (section.steps || []).length - 1 ? "<p>Feeds the next decision step.</p>" : "<p>Produces the current recommendation.</p>"}</div>`).join("")}</div>`;
+    const steps = section.steps || [];
+    body = `<div class="reasoning-chain">${steps.map((step, i) => reasoningStep(step, i, steps.length)).join("")}</div>`;
   } else if (section.layoutType === "scorecard") {
-    body = `<div class="insight-grid">${(section.scorecards || []).map(card => insightCard(card.option, (card.scores || []).map(([label, score, why]) => [`${label}: ${score}/10`, why]))).join("")}</div>`;
+    body = `<div class="scorecard-grid">${(section.scorecards || []).map(scorecardCard).join("")}</div>`;
   } else if (section.layoutType === "table") {
     const headers = section.headers || [];
     const rows = section.rows || [];
@@ -2340,7 +2384,7 @@ function renderDynamicSection(section) {
       ["Decision threshold", scenario.threshold]
     ])).join("")}</div>`;
   } else if (section.layoutType === "recommendations") {
-    body = `<div class="timeline">${(section.recommendations || []).map((item, i) => `<div><span>${i + 1}</span><strong>${escapeHtml(item.action)}</strong><p><b>Why:</b> ${escapeHtml(item.why)}</p><p><b>Success:</b> ${escapeHtml(item.success)}</p><p><b>Failure:</b> ${escapeHtml(item.failure)}</p></div>`).join("")}</div>`;
+    body = `<div class="recommendation-list">${(section.recommendations || []).map(recommendationStep).join("")}</div>`;
   } else if (section.layoutType === "evidence") {
     body = `<ul class="signal-list">${(section.items || []).map(item => signalItem(item, "Collect and verify this before making the decision.")).join("")}</ul>`;
   } else if (section.layoutType === "missing_info") {
@@ -2349,7 +2393,7 @@ function renderDynamicSection(section) {
     body = `<div class="insight-grid">${insightCard("Strongest objection", section.contrarian?.criticism || "The current recommendation depends on unverified evidence.")}${insightCard("Does it change the conclusion?", section.contrarian?.effect || "It changes the conclusion only if evidence crosses the stated thresholds.")}</div>`;
   } else if (section.layoutType === "final") {
     const final = section.finalRecommendation || {};
-    body = `<div class="confidence-grid">
+    body = `<div class="confidence-grid final-grid">
       ${insightCard("Decision", final.decision || "Test first")}
       ${insightCard("Confidence", final.confidence || "66%")}
       ${insightCard("Biggest assumption", final.biggestAssumption || "The strongest assumption still needs verification.")}
