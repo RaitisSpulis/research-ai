@@ -347,7 +347,7 @@ function analyzePrompt(prompt) {
   const categoryContent = getCategoryContent(category, topic, seed);
   const dynamicContent = getDynamicReportContent({ prompt, topic, seed, category, intent, industry });
 
-  return {
+  const report = {
     prompt,
     title,
     topic,
@@ -365,6 +365,10 @@ function analyzePrompt(prompt) {
     ...categoryContent,
     ...dynamicContent
   };
+
+  report.sections = buildDynamicSections(report);
+  report.finalRecommendation = getFinalRecommendation(report);
+  return report;
 }
 
 /* -- AI request, prompt, and response architecture -- */
@@ -516,12 +520,89 @@ function htmlFromAiText(text) {
     .join("<br><br>");
 }
 
+function stripJsonFence(text) {
+  return String(text)
+    .trim()
+    .replace(/^```(?:json)?\s*/i, "")
+    .replace(/\s*```$/i, "")
+    .trim();
+}
+
+function tryParseJsonReport(text) {
+  const clean = stripJsonFence(text);
+  try {
+    return JSON.parse(clean);
+  } catch {
+    const start = clean.indexOf("{");
+    const end = clean.lastIndexOf("}");
+    if (start === -1 || end === -1 || end <= start) return null;
+    try {
+      return JSON.parse(clean.slice(start, end + 1));
+    } catch {
+      return null;
+    }
+  }
+}
+
+function normalizeAiSection(section, index) {
+  if (!section || typeof section !== "object") return null;
+  const title = section.title || `Section ${index + 1}`;
+  return {
+    id: section.id || slugifyId(title),
+    title,
+    purpose: section.purpose || "Analysis section",
+    layoutType: section.layoutType || section.layout || "paragraphs",
+    paragraphs: Array.isArray(section.paragraphs) ? section.paragraphs : undefined,
+    items: Array.isArray(section.items) ? section.items : undefined,
+    headers: Array.isArray(section.table?.headers) ? section.table.headers : section.headers,
+    rows: Array.isArray(section.table?.rows) ? section.table.rows : section.rows,
+    scenarios: Array.isArray(section.scenarios) ? section.scenarios : undefined,
+    recommendations: Array.isArray(section.recommendations) ? section.recommendations : undefined,
+    finalRecommendation: section.finalRecommendation
+  };
+}
+
+function normalizeAiJsonReport(json, request, providerResponse) {
+  if (!json || typeof json !== "object" || !Array.isArray(json.sections)) return null;
+  const base = analyzePrompt(request.userPrompt);
+  const sections = json.sections.map(normalizeAiSection).filter(Boolean);
+  if (!sections.length) return null;
+
+  const final = json.finalRecommendation || base.finalRecommendation || getFinalRecommendation(base);
+  const evidence = Array.isArray(json.evidenceToVerify) ? json.evidenceToVerify : [];
+  const limitations = Array.isArray(json.limitations) ? json.limitations : [];
+
+  if (evidence.length && !sections.some(section => /evidence/i.test(section.title))) {
+    sections.push(makeSection("Evidence To Verify", "Exact evidence to collect before acting.", "evidence", { items: evidence }));
+  }
+
+  if (final && !sections.some(section => /final recommendation/i.test(section.title))) {
+    sections.push(makeSection("Final Recommendation", "Close with a decision.", "final", { finalRecommendation: final }));
+  }
+
+  return {
+    ...base,
+    title: json.reportTitle || base.title,
+    reportType: json.reportType || request.reportType,
+    mode: request.mode,
+    provider: providerResponse.provider || request.mode,
+    model: providerResponse.model || "",
+    createdAt: providerResponse.createdAt || new Date().toISOString(),
+    sections,
+    finalRecommendation: final,
+    limitations: limitations.length ? limitations.map(item => Array.isArray(item) ? item : ["Limitation", String(item)]) : base.limitations
+  };
+}
+
 function mergeAiTextIntoReport(providerResponse, request) {
   const base = analyzePrompt(request.userPrompt);
   const aiText = String(providerResponse.text || providerResponse.content || "").trim();
   if (!aiText) {
     throw new InvalidResponse("AI provider response did not include report text.");
   }
+
+  const jsonReport = normalizeAiJsonReport(tryParseJsonReport(aiText), request, providerResponse);
+  if (jsonReport) return jsonReport;
 
   return {
     ...base,
@@ -1616,7 +1697,422 @@ function representativeAlternatives(data) {
   return comparisonRows(data.competitors).slice(0, 3);
 }
 
+function slugifyId(value) {
+  return String(value)
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-|-$/g, "") || "section";
+}
+
+function makeSection(title, purpose, layoutType, content) {
+  return {
+    id: slugifyId(title),
+    title,
+    purpose,
+    layoutType,
+    ...content
+  };
+}
+
+function reasoningItem(observed, assumed, implication, recommendation, change) {
+  return { observed, assumed, implication, recommendation, change };
+}
+
+function recommendation(action, why, success, failure) {
+  return { action, why, success, failure };
+}
+
+function table(headers, rows) {
+  return { headers, rows };
+}
+
+function getReportArchetype(data) {
+  const prompt = `${data.prompt} ${data.topic}`.toLowerCase();
+  if (/etf|rental apartment|€|20,000|20000|invest it/.test(prompt)) return "capital_allocation";
+  if (/apartment|rent|buy|mortgage|real estate/.test(prompt) && /rent|buy|apartment|mortgage/.test(prompt)) return "buy_vs_rent";
+  if (/agency/.test(prompt) && /ai|automation|marketing/.test(prompt)) return "agency";
+  if (/go-to-market|go to market|gtm|selling|sales motion/.test(prompt) || (/saas/.test(prompt) && /dentist|clinic|dental/.test(prompt))) return "saas_gtm";
+  if (/coffee|restaurant|cafe|shop/.test(prompt)) return "local_hospitality";
+  if (data.intent === "learning_plan") return "learning";
+  if (data.intent === "competitor_comparison") return "comparison";
+  return "general";
+}
+
+function getFinalRecommendation(data) {
+  const archetype = getReportArchetype(data);
+  const recommendations = {
+    buy_vs_rent: {
+      decision: "Test first",
+      confidence: "Medium",
+      biggestAssumption: "The conclusion depends on Riga sale prices, mortgage terms, rent inflation and how long you will hold the property.",
+      nextStep: "Collect 10 comparable sale prices, 10 rent listings, two mortgage offers and estimated building costs before choosing.",
+      deadline: "Make the decision after a two-week evidence sprint, then revisit every six months until 2030."
+    },
+    agency: {
+      decision: "Test first",
+      confidence: "Medium-high",
+      biggestAssumption: "Enough Latvian businesses have repetitive workflows worth at least EUR 300-1,000 per month in saved time or revenue.",
+      nextStep: "Interview 15 target businesses and sell one fixed-scope pilot before building a broad agency offer.",
+      deadline: "Run a 30-day validation sprint and decide go/no-go by the end of month one."
+    },
+    saas_gtm: {
+      decision: "Go, narrowly",
+      confidence: "Medium",
+      biggestAssumption: "Dental clinics feel an urgent admin or revenue problem and will pay for one clear workflow rather than a broad AI toolkit.",
+      nextStep: "Interview 15 clinic owners, launch one landing page and test a single offer around missed calls, no-shows or admin automation.",
+      deadline: "Validate channel and willingness to pay within 30 days before building more features."
+    },
+    local_hospitality: {
+      decision: "Wait until location evidence is strong",
+      confidence: "Medium",
+      biggestAssumption: "Daily foot traffic, rent, labor and repeat purchase economics support a premium concept.",
+      nextStep: "Observe three candidate streets at peak times, price the menu, and model break-even orders per day.",
+      deadline: "Do not sign a lease until the site passes a two-week demand and cost test."
+    },
+    capital_allocation: {
+      decision: "Choose staged allocation",
+      confidence: "Medium",
+      biggestAssumption: "The best choice depends on risk tolerance, time horizon, income stability and ability to operate an active business.",
+      nextStep: "Split the decision into safety reserve, passive investment and one small active experiment rather than committing all EUR 20,000 at once.",
+      deadline: "Decide allocation rules this week, then review after 90 days."
+    },
+    learning: {
+      decision: "Go with milestones",
+      confidence: "Medium-high",
+      biggestAssumption: "Progress depends on weekly practice and feedback, not content consumption.",
+      nextStep: "Define three portfolio projects and a weekly review cadence before choosing more courses.",
+      deadline: "Use a 90-day plan with measurable weekly outputs."
+    },
+    comparison: {
+      decision: "Choose after criteria test",
+      confidence: "Medium",
+      biggestAssumption: "The best option depends on weighted criteria, implementation effort and edge cases.",
+      nextStep: "Score each option against the same criteria and test the top two with real workflow requirements.",
+      deadline: "Make the choice after a one-week comparison sprint."
+    },
+    general: {
+      decision: "Test first",
+      confidence: "Medium",
+      biggestAssumption: "The prompt contains enough context for a useful first draft, but the evidence still needs verification.",
+      nextStep: "Collect the three strongest pieces of evidence that would change the recommendation.",
+      deadline: "Run a focused evidence review before committing resources."
+    }
+  };
+  return recommendations[archetype] || recommendations.general;
+}
+
+function dynamicEvidence(archetype) {
+  const evidence = {
+    buy_vs_rent: [
+      "Recent Riga apartment sale comparables for the target district",
+      "Current rent listings for similar apartments",
+      "Mortgage offers including rate, down payment and fees",
+      "HOA, building fund, insurance and maintenance costs",
+      "Transaction taxes, notary fees and broker fees",
+      "Five-year local price trend and liquidity risk"
+    ],
+    agency: [
+      "Interviews with target business owners or operators",
+      "Screenshots or walkthroughs of current workflows",
+      "Hours lost per process each week",
+      "Decision-maker identity and budget owner",
+      "Existing tools used and why they are insufficient",
+      "Willingness to pay for a fixed-scope pilot"
+    ],
+    saas_gtm: [
+      "Competitor pricing pages and packaging",
+      "Keyword demand for dental admin, no-show and missed-call problems",
+      "Interviews with clinic owners and office managers",
+      "Landing page conversion from one specific promise",
+      "Churn risk signals from workflow frequency",
+      "Sales objections from the first 10 clinics"
+    ],
+    local_hospitality: [
+      "Foot traffic counts by hour and day",
+      "Nearby competitor menus and prices",
+      "Rent, deposit, utilities and fit-out costs",
+      "Supplier quotes for core menu items",
+      "Average order value assumptions",
+      "Repeat purchase signals from a pop-up or preorder test"
+    ],
+    capital_allocation: [
+      "Personal runway and emergency reserve needs",
+      "ETF fee, diversification and time-horizon assumptions",
+      "Rental apartment down payment and cash-flow estimates",
+      "AI agency pilot demand and operating capacity",
+      "Tax implications and liquidity needs",
+      "Downside case for each option"
+    ],
+    general: [
+      "Primary source documents",
+      "Customer or stakeholder interviews",
+      "Comparable alternatives and pricing",
+      "Cost, timing and risk assumptions",
+      "Evidence that would change the conclusion"
+    ]
+  };
+  return evidence[archetype] || evidence.general;
+}
+
+function dynamicRecommendations(archetype, data) {
+  const topic = data.topic;
+  const items = {
+    buy_vs_rent: [
+      recommendation("Build a buy-vs-rent spreadsheet for three Riga districts.", "The decision depends on local prices and rent, not a generic property rule.", "Proceed if ownership beats renting under conservative rent, rate and maintenance assumptions.", "Wait if the break-even requires optimistic appreciation or a holding period you cannot commit to."),
+      recommendation("Request two mortgage offers before comparing scenarios.", "Monthly cost and down payment constraints can change the answer immediately.", "Continue if the payment leaves enough cash buffer after repairs and fees.", "Delay if the mortgage offer makes the decision fragile under a rate or income shock."),
+      recommendation("Define a 2030 decision threshold.", "A clear threshold prevents emotional buying or endless waiting.", "Buy if verified total cost and lifestyle stability beat renting by your threshold.", "Rent if liquidity, job mobility or better investment use remains more valuable.")
+    ],
+    agency: [
+      recommendation("Interview 15 Latvian business owners in one vertical.", "A narrow vertical reveals repeated workflow pain faster than broad agency positioning.", "Proceed if at least 5 describe a painful workflow worth EUR 300+/mo.", "Stop or reposition if they like AI in theory but will not name a paid problem."),
+      recommendation("Sell one fixed-scope pilot before building service packages.", "Revenue is stronger evidence than interest.", "Proceed if one customer pays EUR 1,000-3,000 for a defined automation outcome.", "Revise the offer if prospects want free advice but avoid paid implementation."),
+      recommendation("Document every pilot as a reusable playbook.", "Agency margin depends on repeatable delivery, not custom work forever.", "Scale if delivery steps repeat across customers.", "Stay small if each project requires a new process from scratch.")
+    ],
+    saas_gtm: [
+      recommendation("Interview 15 dental clinic owners or office managers.", "The product must map to a painful clinic workflow, not generic AI enthusiasm.", "Proceed if at least 5 report missed calls, no-shows or admin work worth EUR 300+/mo.", "Change ICP if clinics see the problem as annoying but not worth paying for."),
+      recommendation("Launch one landing page with one workflow promise.", "A narrow promise tests positioning before product complexity grows.", "Continue if targeted traffic converts to calls or waitlist signups above 5-8%.", "Rewrite positioning if visitors do not understand the outcome in 10 seconds."),
+      recommendation("Test founder-led sales before paid acquisition.", "Dental SaaS may require trust, education and workflow proof.", "Proceed if clinics book demos from direct outreach.", "Delay scaling if demos require heavy custom explanation.")
+    ],
+    local_hospitality: [
+      recommendation("Count foot traffic at candidate locations for two weeks.", "A coffee shop is a location economics problem before it is a brand problem.", "Proceed if conservative order volume covers rent, labor and waste.", "Walk away if the model only works with peak-hour optimism."),
+      recommendation("Run a pop-up or preorder test.", "Repeat purchase matters more than opening-week curiosity.", "Continue if customers return and accept target pricing.", "Revise menu or positioning if demand is novelty-only."),
+      recommendation("Calculate break-even orders per day before lease negotiation.", "Rent can quietly destroy a premium concept.", "Sign only if the site works under conservative average order value.", "Do not sign if break-even requires unrealistic daily volume.")
+    ],
+    capital_allocation: [
+      recommendation("Reserve cash before choosing investments.", "EUR 20,000 is large enough to protect optionality and test upside.", "Proceed if emergency reserve and near-term obligations are covered.", "Do not invest all capital if one unexpected cost would force selling."),
+      recommendation("Run a 90-day AI agency experiment with capped capital.", "The agency path has upside but requires sales and execution, not just investment.", "Continue if the experiment produces paid demand.", "Stop if it consumes time without paid customer evidence."),
+      recommendation("Compare ETFs and property using liquidity-adjusted returns.", "Passive and real estate options differ in effort, liquidity and concentration risk.", "Allocate more to passive options if you value flexibility.", "Avoid property if down payment and repairs create a cash squeeze.")
+    ],
+    general: [
+      recommendation(`Turn "${topic}" into a one-week evidence sprint.`, "The fastest improvement is replacing assumptions with targeted proof.", "Proceed if evidence supports the core decision threshold.", "Pause if the strongest assumption remains unverified."),
+      recommendation("Write the decision rule before collecting more information.", "A decision rule prevents research from becoming endless reading.", "Continue if the next evidence directly changes the decision.", "Stop collecting data that does not affect the outcome."),
+      recommendation("Review the final decision with one knowledgeable outsider.", "A second perspective catches blind spots and hidden constraints.", "Proceed if objections are answerable with evidence.", "Revise if the review reveals untested risks.")
+    ]
+  };
+  return items[archetype] || items.general;
+}
+
+function buildDynamicSections(data) {
+  const archetype = getReportArchetype(data);
+  const final = getFinalRecommendation(data);
+  const commonRisks = (data.risks || []).slice(0, 4).map(([title, text]) => ({ title, text }));
+  const evidence = dynamicEvidence(archetype);
+  const recs = dynamicRecommendations(archetype, data);
+
+  const sectionSets = {
+    buy_vs_rent: [
+      makeSection("Decision Summary", "State the decision and current recommendation.", "paragraphs", { paragraphs: [`ResearchAI recommends <strong>${final.decision}</strong>. Buying versus renting in Riga should be decided by verified local costs, holding period and liquidity needs rather than headline property optimism.`] }),
+      makeSection("Key Assumptions", "Make the decision variables explicit.", "reasoning", { items: [reasoningItem("The prompt compares buying now with renting until 2030.", "Mortgage rates, rent inflation and maintenance costs materially affect the result.", "The answer can change with only a few local inputs.", "Collect local comps before choosing.", "A lower mortgage rate or unusually cheap apartment would improve the buy case.")] }),
+      makeSection("Buy vs Rent Scenarios", "Compare the realistic paths.", "scenarios", { scenarios: [
+        { name: "Buy now", summary: "Useful if price, financing and holding period are attractive.", assumptions: ["Stable income", "Long holding period", "Maintenance buffer"], threshold: "Buy only if total monthly ownership cost and opportunity cost beat renting under conservative assumptions." },
+        { name: "Rent until 2030", summary: "Useful if flexibility and liquidity are valuable.", assumptions: ["Rent remains manageable", "Capital can be invested elsewhere", "No urgent lifestyle need to own"], threshold: "Rent if ownership requires optimistic appreciation to win." },
+        { name: "Wait 2-3 years", summary: "Useful if rates, prices or personal plans are uncertain.", assumptions: ["Savings continue", "Market supply improves", "No forced move"], threshold: "Wait if better evidence or personal stability is likely soon." }
+      ] }),
+      makeSection("Break-even Logic", "Show the formula instead of fake market size.", "table", table(["Input", "Why it matters", "Evidence needed"], [
+        ["Purchase price + fees", "Sets the initial hurdle", "Sale comps, taxes, notary and broker costs"],
+        ["Mortgage payment", "Determines monthly affordability", "Two bank offers"],
+        ["Rent avoided", "Main ownership benefit", "Comparable rent listings"],
+        ["Maintenance and HOA", "Often underestimated", "Building costs and reserve fund"],
+        ["Holding period", "Spreads transaction costs", "Personal plan through 2030"]
+      ])),
+      makeSection("Sensitivity Analysis", "Identify what changes the answer.", "items", { items: [
+        { title: "Interest rate sensitivity", text: "A higher rate weakens buying unless price falls enough to compensate." },
+        { title: "Rent inflation sensitivity", text: "Fast rent growth improves buying, but only if ownership costs are controlled." },
+        { title: "Liquidity sensitivity", text: "If you may need cash or mobility, renting retains option value." }
+      ] }),
+      makeSection("Risks", "Name the downside cases.", "items", { items: commonRisks }),
+      makeSection("Recommended Next Steps", "Make the decision testable.", "recommendations", { recommendations: recs }),
+      makeSection("Evidence To Verify", "List exact evidence to collect.", "evidence", { items: evidence }),
+      makeSection("Final Recommendation", "Close with a decision.", "final", { finalRecommendation: final })
+    ],
+    agency: [
+      makeSection("Go / No-Go Summary", "Decide whether the agency deserves a test.", "paragraphs", { paragraphs: [`Recommendation: <strong>${final.decision}</strong>. An AI automation agency can be attractive if one customer segment has repeated, measurable workflow pain and will pay for a fixed outcome.`] }),
+      makeSection("Target Customer Hypothesis", "Define the first buyer.", "items", { items: [
+        { title: "Initial ICP", text: "Choose one vertical such as clinics, accountants, agencies, real estate offices or local service businesses." },
+        { title: "Buyer", text: "Target the person who owns time, cost or revenue leakage, not a casual AI enthusiast." },
+        { title: "Trigger", text: "Prioritize workflows that already cause missed revenue, slow response time or manual admin overload." }
+      ] }),
+      makeSection("Workflow Pain Map", "Make the analysis concrete.", "reasoning", { items: [reasoningItem("Small businesses often lose time in admin, sales follow-up and reporting.", "They will pay only when the pain is frequent and measurable.", "The offer should sell time saved or revenue recovered, not AI implementation.", "Audit five workflows before pitching.", "Weak pain or unclear ownership should stop the agency idea.")] }),
+      makeSection("Offer Design", "Package one sellable service.", "table", table(["Offer", "What it includes", "Success condition"], [
+        ["Workflow audit", "Map current tools, time lost and automation opportunities", "Customer identifies one painful workflow"],
+        ["Pilot implementation", "Build one automation with human review and handoff", "Pilot saves time or recovers revenue"],
+        ["Monthly retainer", "Monitoring, improvements and support", "Client relies on workflow weekly"]
+      ])),
+      makeSection("Pricing Model", "Show illustrative economics.", "table", table(["Metric", "Illustrative assumption", "Decision use"], [
+        ["Pilot price", "EUR 1,000-3,000", "Tests willingness to pay"],
+        ["Retainer", "EUR 300-1,500/mo", "Tests recurring value"],
+        ["Capacity", "2-4 pilots/month solo", "Limits early revenue"],
+        ["Break-even", "First 2-3 paid pilots", "Validates offer before scaling"]
+      ])),
+      makeSection("Distribution Plan", "Choose channels that fit trust selling.", "items", { items: [
+        { title: "Founder-led outreach", text: "Send specific workflow observations, not generic AI pitches." },
+        { title: "Local proof", text: "Use one case study from the same market before broad content marketing." },
+        { title: "Partner channel", text: "Accountants, web agencies or IT support firms can introduce workflow problems." }
+      ] }),
+      makeSection("Validation Plan", "Concrete next steps.", "recommendations", { recommendations: recs }),
+      makeSection("Evidence To Verify", "List exact evidence to collect.", "evidence", { items: evidence }),
+      makeSection("Final Recommendation", "Close with a decision.", "final", { finalRecommendation: final })
+    ],
+    saas_gtm: [
+      makeSection("Positioning", "Define the wedge.", "paragraphs", { paragraphs: [`Position this as a dental workflow product, not a broad AI tools platform. The strongest wedge is likely one costly clinic problem such as missed calls, no-shows, intake admin or follow-up.`] }),
+      makeSection("ICP", "Identify the first customer.", "items", { items: [
+        { title: "Primary buyer", text: "Independent dental clinic owner or office manager." },
+        { title: "Pain threshold", text: "At least several hours per week lost or measurable missed revenue." },
+        { title: "Buying trigger", text: "Staff overload, missed calls, no-shows or slow patient follow-up." }
+      ] }),
+      makeSection("Pain Points", "Translate pain into product demand.", "reasoning", { items: [reasoningItem("Dental teams often run on phone, calendar and manual admin workflows.", "They will not buy generic AI; they buy fewer missed bookings or less admin burden.", "The first product promise should be narrow and measurable.", "Validate one workflow before building a toolkit.", "If clinics will not quantify the problem, the GTM should pause.")] }),
+      makeSection("Channel Strategy", "Select first channels.", "table", table(["Channel", "Why it may work", "Test"], [
+        ["Direct outreach", "Specific clinic problems can be personalized", "50 clinics, 10 replies, 5 calls"],
+        ["Dental communities", "Trust and peer proof matter", "Post one practical workflow teardown"],
+        ["Referral partners", "IT/web vendors already serve clinics", "Secure two partner conversations"]
+      ])),
+      makeSection("Offer & Pricing", "Use assumptions visibly.", "table", table(["Hypothesis", "Illustrative assumption", "What validates it"], [
+        ["Starter price", "EUR 99-299/mo", "Clinics accept price for one workflow"],
+        ["Conversion", "5-10% from qualified demos", "Demos produce paid pilots"],
+        ["Payback", "Founder-led sales first", "CAC stays mostly time-based"],
+        ["Main sensitivity", "Urgency of the workflow pain", "Problem appears weekly, not occasionally"]
+      ])),
+      makeSection("Competitor Alternatives", "Map substitutes.", "table", table(["Alternative", "Why clinics use it", "Weakness"], [
+        ["Manual admin", "Known and low cash cost", "Time loss and inconsistency"],
+        ["Practice management software", "System of record", "May not solve AI workflow layer"],
+        ["Generic AI tools", "Flexible", "No clinic-specific workflow ownership"]
+      ])),
+      makeSection("30-Day Launch Plan", "Make GTM executable.", "recommendations", { recommendations: recs }),
+      makeSection("Evidence To Verify", "List exact evidence to collect.", "evidence", { items: evidence }),
+      makeSection("Final Recommendation", "Close with a decision.", "final", { finalRecommendation: final })
+    ],
+    local_hospitality: [
+      makeSection("Decision Summary", "Decide whether to proceed.", "paragraphs", { paragraphs: [`Recommendation: <strong>${final.decision}</strong>. A specialty coffee shop should be treated as a location and unit-economics decision before brand or design decisions.`] }),
+      makeSection("Demand Hypothesis", "Define what must be true.", "reasoning", { items: [reasoningItem("A coffee shop depends on repeat local behavior.", "Foot traffic and repeat purchase matter more than broad category growth.", "The concept works only if daily volume covers rent, labor and waste.", "Test the location and menu before signing a lease.", "Weak repeat demand should stop the project.")] }),
+      makeSection("Location Economics", "Show the model inputs.", "table", table(["Input", "Why it matters", "Evidence needed"], [
+        ["Daily orders", "Main revenue driver", "Foot traffic counts and competitor observation"],
+        ["Average order value", "Determines revenue per visit", "Menu pricing and bundle tests"],
+        ["Rent + utilities", "Largest fixed burden", "Lease quote and service charges"],
+        ["Labor", "Controls service quality and margin", "Staffing plan by daypart"],
+        ["Waste", "Erodes food and beverage margin", "Menu complexity and supplier terms"]
+      ])),
+      makeSection("Break-even Scenarios", "Make numbers illustrative and testable.", "scenarios", { scenarios: [
+        { name: "Conservative", summary: "Lower foot traffic, slower repeat purchase.", assumptions: ["Small menu", "Owner involvement", "Tight labor"], threshold: "Proceed only if rent remains manageable." },
+        { name: "Base case", summary: "Steady morning and weekend demand.", assumptions: ["Reliable repeat customers", "Clear premium positioning"], threshold: "Requires daily orders to cover fixed cost with margin." },
+        { name: "Upside", summary: "Strong local habit and brand pull.", assumptions: ["High repeat rate", "Events or partnerships"], threshold: "Use only after proof, not before lease." }
+      ] }),
+      makeSection("Validation Plan", "Concrete next steps.", "recommendations", { recommendations: recs }),
+      makeSection("Evidence To Verify", "List exact evidence to collect.", "evidence", { items: evidence }),
+      makeSection("Final Recommendation", "Close with a decision.", "final", { finalRecommendation: final })
+    ],
+    capital_allocation: [
+      makeSection("Decision Summary", "Compare allocation paths.", "paragraphs", { paragraphs: [`Recommendation: <strong>${final.decision}</strong>. Do not treat AI agency, ETFs and rental property as interchangeable; they differ in effort, liquidity, downside and learning value.`] }),
+      makeSection("Option Comparison", "Compare choices directly.", "table", table(["Option", "Upside", "Main risk", "Best if"], [
+        ["AI agency", "High learning and income upside", "Execution and sales risk", "You can sell and deliver pilots"],
+        ["ETFs", "Diversified passive exposure", "Market volatility", "You value simplicity and liquidity"],
+        ["Rental apartment", "Asset ownership and rental income", "Concentration and repair risk", "You have enough capital and local deal evidence"]
+      ])),
+      makeSection("Financial Logic", "Use explicit assumptions.", "table", table(["Variable", "Question to answer", "Decision effect"], [
+        ["Runway", "How much cash must remain untouched?", "Sets investable amount"],
+        ["Time horizon", "When might you need the money?", "Controls ETF/property suitability"],
+        ["Agency capacity", "Can you sell and deliver?", "Controls active-business upside"],
+        ["Property leverage", "Can EUR 20,000 safely support purchase costs?", "May rule out property"]
+      ])),
+      makeSection("Sensitivity Analysis", "What changes the answer.", "items", { items: [
+        { title: "If you need liquidity", text: "ETFs and cash reserve become more attractive than property." },
+        { title: "If you can sell services", text: "A small AI agency experiment can have asymmetric learning and revenue upside." },
+        { title: "If property requires leverage stress", text: "Rental apartment should wait until capital and deal evidence improve." }
+      ] }),
+      makeSection("90-Day Test Plan", "Concrete next steps.", "recommendations", { recommendations: recs }),
+      makeSection("Evidence To Verify", "List exact evidence to collect.", "evidence", { items: evidence }),
+      makeSection("Final Recommendation", "Close with a decision.", "final", { finalRecommendation: final })
+    ],
+    general: [
+      makeSection("Decision Summary", "Frame the decision.", "paragraphs", { paragraphs: [`Recommendation: <strong>${final.decision}</strong>. The report should be used to identify what is already clear, what is assumed and what evidence would change the conclusion.`] }),
+      makeSection("Reasoning Snapshot", "Show transparent reasoning.", "reasoning", { items: [reasoningItem("The prompt asks for structured guidance.", "Some context is missing and should be verified.", "A first draft is useful if it leads to specific evidence collection.", "Run a short validation sprint.", "New evidence could change the recommendation.")] }),
+      makeSection("Risks", "Name the downside cases.", "items", { items: commonRisks }),
+      makeSection("Recommendations", "Concrete next steps.", "recommendations", { recommendations: recs }),
+      makeSection("Evidence To Verify", "List exact evidence to collect.", "evidence", { items: evidence }),
+      makeSection("Final Recommendation", "Close with a decision.", "final", { finalRecommendation: final })
+    ]
+  };
+
+  return sectionSets[archetype] || sectionSets.general;
+}
+
+function renderDynamicSection(section) {
+  if (!section || !section.title) return "";
+  const id = escapeHtml(section.id || slugifyId(section.title));
+  const purpose = section.purpose ? `<span>${escapeHtml(section.purpose)}</span>` : "";
+  let body = "";
+  const safeParagraph = value => escapeHtml(value)
+    .replace(/&lt;strong&gt;/g, "<strong>")
+    .replace(/&lt;\/strong&gt;/g, "</strong>");
+
+  if (section.layoutType === "paragraphs") {
+    body = (section.paragraphs || []).map(p => `<div class="executive-brief"><p>${safeParagraph(p)}</p></div>`).join("");
+  } else if (section.layoutType === "items") {
+    body = `<ul class="signal-list">${(section.items || []).map(item => signalItem(item.title, item.text)).join("")}</ul>`;
+  } else if (section.layoutType === "reasoning") {
+    body = `<div class="insight-grid">${(section.items || []).map(item => insightCard("Observed", item.observed) + insightCard("Assumed", item.assumed) + insightCard("Implication", item.implication) + insightCard("Recommendation", item.recommendation) + insightCard("What would change this", item.change)).join("")}</div>`;
+  } else if (section.layoutType === "table") {
+    const headers = section.headers || [];
+    const rows = section.rows || [];
+    body = `<div class="table-wrap"><table><thead><tr>${headers.map(h => `<th>${escapeHtml(h)}</th>`).join("")}</tr></thead><tbody>${rows.map(row => `<tr>${row.map(cell => `<td>${escapeHtml(cell)}</td>`).join("")}</tr>`).join("")}</tbody></table></div>`;
+  } else if (section.layoutType === "scenarios") {
+    body = `<div class="insight-grid">${(section.scenarios || []).map(scenario => insightCard(scenario.name, [
+      ["Summary", scenario.summary],
+      ["Assumptions", (scenario.assumptions || []).join("; ")],
+      ["Decision threshold", scenario.threshold]
+    ])).join("")}</div>`;
+  } else if (section.layoutType === "recommendations") {
+    body = `<div class="timeline">${(section.recommendations || []).map((item, i) => `<div><span>${i + 1}</span><strong>${escapeHtml(item.action)}</strong><p><b>Why:</b> ${escapeHtml(item.why)}</p><p><b>Success:</b> ${escapeHtml(item.success)}</p><p><b>Failure:</b> ${escapeHtml(item.failure)}</p></div>`).join("")}</div>`;
+  } else if (section.layoutType === "evidence") {
+    body = `<ul class="signal-list">${(section.items || []).map(item => signalItem(item, "Collect and verify this before making the decision.")).join("")}</ul>`;
+  } else if (section.layoutType === "final") {
+    const final = section.finalRecommendation || {};
+    body = `<div class="confidence-grid">
+      ${insightCard("Decision", final.decision || "Test first")}
+      ${insightCard("Confidence", final.confidence || "Medium")}
+      ${insightCard("Biggest assumption", final.biggestAssumption || "The strongest assumption still needs verification.")}
+      ${insightCard("Next verification step", final.nextStep || "Collect the evidence most likely to change the decision.")}
+      ${insightCard("Time horizon", final.deadline || "Set a deadline before committing resources.")}
+    </div>`;
+  }
+
+  if (!body.trim()) return "";
+
+  return `
+    <section class="report-section" id="${id}">
+      <div class="section-title">
+        <div>
+          <p class="section-kicker">${escapeHtml(section.title)}</p>
+          <h2>${escapeHtml(section.title)}</h2>
+        </div>
+        ${purpose}
+      </div>
+      ${body}
+    </section>`;
+}
+
+function buildDynamicReportHTML(data) {
+  const sections = (data.sections || []).filter(section => section && section.title);
+  const final = data.finalRecommendation || getFinalRecommendation(data);
+
+  return `
+    <section class="report-hero" id="summary">
+      <p class="eyebrow"><span aria-hidden="true"></span> Research report</p>
+      <h1 id="reportMainTitle">${escapeHtml(data.title)}</h1>
+      <p id="reportQuestion">Research question: "${escapeHtml(data.prompt)}"</p>
+      <div class="report-stats">
+        <div><strong>${escapeHtml(final.decision || "Draft")}</strong><span>Decision</span></div>
+        <div><strong>${sections.length}</strong><span>Sections</span></div>
+        <div><strong>${escapeHtml(final.confidence || "Medium")}</strong><span>Confidence</span></div>
+        <div><strong>${escapeHtml(data.launchWindow || "30 days")}</strong><span>Time horizon</span></div>
+      </div>
+    </section>
+    ${sections.map(renderDynamicSection).join("")}`;
+}
+
 function buildReportHTML(data) {
+  if (Array.isArray(data.sections) && data.sections.length) {
+    return buildDynamicReportHTML(data);
+  }
+
   const findingsHtml = data.findings.map(([t, p]) => insightCard(t, p)).join("");
   const advantagesHtml = data.advantages.map(([t, p]) => signalItem(t, p)).join("");
   const disadvantagesHtml = data.disadvantages.map(([t, p]) => signalItem(t, p)).join("");
@@ -1804,8 +2300,17 @@ function buildReportHTML(data) {
     </section>`;
 }
 
-function buildTreeNav() {
-  const sections = [
+function getTreeSections(data) {
+  if (Array.isArray(data?.sections) && data.sections.length) {
+    return [
+      ["summary", "Cover"],
+      ...data.sections
+        .filter(section => section && section.title)
+        .map(section => [section.id || slugifyId(section.title), section.title])
+    ];
+  }
+
+  return [
     ["summary", "Cover"],
     ["executive", "Executive"],
     ["findings", "Findings"],
@@ -1819,6 +2324,10 @@ function buildTreeNav() {
     ["sources", "Sources"],
     ["confidence", "Limitations"]
   ];
+}
+
+function buildTreeNav(data = currentReport) {
+  const sections = getTreeSections(data);
 
   els.treeNav.innerHTML = sections.map(([id, label], i) =>
     `<a class="tree-link${i === 0 ? " active" : ""}" href="#${id}"><span>${i + 1}</span><b>${label}</b><em aria-hidden="true"></em></a>`
@@ -1848,7 +2357,7 @@ function renderReport(data) {
   els.metricConfidence.textContent = "Draft";
   els.metricDepth.textContent = "Professional";
 
-  buildTreeNav();
+  buildTreeNav(currentReport);
   setupSectionObserver();
   updateFavoriteButton();
   showReportContent(true);

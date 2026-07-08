@@ -39,13 +39,44 @@ function logGeminiDebug(label, value) {
 
 function buildGeminiPrompt(request) {
   return [
-    "Create a professional research report draft for ResearchAI.",
-    "Return concise, structured plain text only. Do not invent citations.",
+    "Create a professional ResearchAI report as strict JSON only.",
+    "Do not wrap the JSON in markdown.",
+    "Do not invent citations or claim verified sources.",
     `User prompt: ${request.userPrompt}`,
     `Intent: ${request.intent || "general_research"}`,
     `Industry: ${request.industry || "general"}`,
     `Report type: ${request.reportType || "general_research"}`,
-    "Clearly separate useful analysis from assumptions and source guidance."
+    "The report structure must adapt to the user question. Do not force a universal 12-section shell.",
+    "Avoid unsupported market sizes. If numbers are illustrative, label assumptions and show how to validate them.",
+    "Every recommendation must include action, why, success condition and failure condition.",
+    "End with a clear final recommendation: Go, No-Go, Wait, Test first, Choose option A or Choose option B.",
+    "Use this JSON schema:",
+    JSON.stringify({
+      reportTitle: "string",
+      reportType: "string",
+      sections: [
+        {
+          id: "short-kebab-case-id",
+          title: "string",
+          purpose: "string",
+          layoutType: "paragraphs | items | table | scenarios | recommendations | evidence | final",
+          paragraphs: ["string"],
+          items: [{ title: "string", text: "string" }],
+          table: { headers: ["string"], rows: [["string"]] },
+          scenarios: [{ name: "string", summary: "string", assumptions: ["string"], threshold: "string" }],
+          recommendations: [{ action: "string", why: "string", success: "string", failure: "string" }]
+        }
+      ],
+      finalRecommendation: {
+        decision: "Go | No-Go | Wait | Test first | Choose option A | Choose option B",
+        confidence: "Low | Medium | High",
+        biggestAssumption: "string",
+        nextStep: "string",
+        deadline: "string"
+      },
+      limitations: ["string"],
+      evidenceToVerify: ["string"]
+    })
   ].join("\n");
 }
 
