@@ -118,7 +118,7 @@ const loadingLabels = [
   "Preparing assumptions...",
   "Organizing sections...",
   "Building report...",
-  "Labeling demo estimates...",
+  "Labeling assumptions...",
   "Writing next actions...",
   "Preparing visual report..."
 ];
@@ -427,10 +427,10 @@ class UnknownError extends AIProviderError {
 }
 
 const generationErrorMessages = {
-  ProviderUnavailable: "This report provider is not available yet. Demo Mode is still available.",
-  InvalidConfiguration: "Report generation is not configured correctly. Please switch back to Demo Mode.",
+  ProviderUnavailable: "Live AI is temporarily unavailable. A local sample report can still be created.",
+  InvalidConfiguration: "Report generation is not configured correctly. A local sample report can still be created.",
   RateLimited: "ResearchAI is receiving too many requests right now. Please try again shortly.",
-  Unauthorized: "ResearchAI is not authorized to use this provider yet. Please switch back to Demo Mode.",
+  Unauthorized: "ResearchAI is not authorized to use this provider yet. A local sample report can still be created.",
   InvalidResponse: "ResearchAI could not read the provider response. Please try again.",
   NetworkError: "ResearchAI could not reach the report provider. Please check your connection and try again.",
   Timeout: "The report provider took too long to respond. Please try again.",
@@ -534,12 +534,12 @@ function mergeAiTextIntoReport(providerResponse, request) {
     sources: [
       ["Recommended source review", "Verify the live draft against primary sources, official documents, market reports, and customer evidence."],
       ["Citation status", "This AI Mode draft does not yet include verified citations in the report renderer."],
-      ["Demo safeguards", "ResearchAI keeps assumptions and source guidance visible until connected source verification is active."]
+      ["Trust safeguards", "ResearchAI keeps assumptions and source guidance visible until connected source verification is active."]
     ],
     limitations: [
       ["Live AI draft", "This report used the Gemini backend route, but source verification is not active yet."],
       ["Needs evidence review", "Use the recommendations and source guidance as a starting point before making important decisions."],
-      ["Saved locally", "The report is saved in this browser workspace like Demo Mode reports."]
+      ["Saved locally", "The report is saved in this browser workspace."]
     ]
   };
 }
@@ -808,7 +808,7 @@ function getCategoryContent(category, topic, seed) {
       ]
     },
     investment: {
-      executive: `This demo analysis of <strong>${escapeHtml(topic)}</strong> outlines a balanced investment view. Catalysts include product momentum and market expansion, while risks center on valuation, competition, and macro sensitivity. This report is a structured framework - not financial advice.`,
+      executive: `This analysis of <strong>${escapeHtml(topic)}</strong> outlines a balanced investment view. Catalysts include product momentum and market expansion, while risks center on valuation, competition, and macro sensitivity. This report is a structured framework - not financial advice.`,
       thesis: "Quality compounders with durable moats outperform when bought with margin of safety.",
       customer: "Individual investors and analysts building structured theses.",
       monetization: "Premium research exports and portfolio scenario tools.",
@@ -871,7 +871,7 @@ function getCategoryContent(category, topic, seed) {
       ],
       actions: [
         ["Week 1-4: Foundations", "Python, statistics, and ML basics with daily coding."],
-        ["Week 5-8: Build", "Ship 2 small AI projects with real users or demos."],
+        ["Week 5-8: Build", "Ship 2 small AI projects with real users or proof-of-work examples."],
         ["Week 9-12: Specialize", "Pick one vertical (RAG, agents, or fine-tuning) and go deep."],
         ["Publish portfolio", "Write case studies for each project on GitHub and LinkedIn."]
       ],
@@ -938,7 +938,7 @@ function getCategoryContent(category, topic, seed) {
       ["Decision framework", "Explicit assumptions, risks, and next steps."]
     ],
     disadvantages: [
-      ["Data limitations", "Demo mode uses illustrative estimates. Verify important decisions with primary sources."],
+      ["Data limitations", "Illustrative estimates should be verified with primary sources before important decisions."],
       ["Local variance", "Market conditions vary significantly by geography."],
       ["Execution risk", "Analysis quality depends on input specificity."]
     ]
@@ -1297,7 +1297,7 @@ function getIntentProfile(intent, topic, industry) {
   const label = industryLabel(industry);
   const profiles = {
     startup_validation: {
-      executive: `This demo report treats <strong>${escapeHtml(topic)}</strong> as a validation problem. The priority is not proving the idea is exciting; it is testing whether a specific buyer has a painful enough problem, a reachable channel, and a reason to act now in the ${label} space.`,
+      executive: `This report treats <strong>${escapeHtml(topic)}</strong> as a validation problem. The priority is not proving the idea is exciting; it is testing whether a specific buyer has a painful enough problem, a reachable channel, and a reason to act now in the ${label} space.`,
       findings: [
         ["Validation focus", "The first milestone is evidence of real demand, not a polished product."],
         ["Buyer clarity", "The report should identify who feels the pain and who controls the budget."],
@@ -1305,7 +1305,7 @@ function getIntentProfile(intent, topic, industry) {
       ]
     },
     business_plan: {
-      executive: `This demo report frames <strong>${escapeHtml(topic)}</strong> as an operating plan. The most important questions are customer demand, delivery model, unit economics, launch sequencing, and what must be proven before committing serious capital.`,
+      executive: `This report frames <strong>${escapeHtml(topic)}</strong> as an operating plan. The most important questions are customer demand, delivery model, unit economics, launch sequencing, and what must be proven before committing serious capital.`,
       findings: [
         ["Operating model", "The plan needs a clear path from first customer to repeatable delivery."],
         ["Unit economics", "Pricing, cost structure, and capacity should be modeled before launch."],
@@ -1313,7 +1313,7 @@ function getIntentProfile(intent, topic, industry) {
       ]
     },
     market_analysis: {
-      executive: `This demo report frames <strong>${escapeHtml(topic)}</strong> as a market analysis. The goal is to understand segment quality, demand signals, competitive pressure, and what evidence would make the opportunity more or less attractive.`,
+      executive: `This report frames <strong>${escapeHtml(topic)}</strong> as a market analysis. The goal is to understand segment quality, demand signals, competitive pressure, and what evidence would make the opportunity more or less attractive.`,
       findings: [
         ["Segment quality", "A smaller reachable segment can be more useful than a large abstract market."],
         ["Demand evidence", "Search behavior, spending patterns, reviews, and workflow pain should be compared."],
@@ -1321,7 +1321,7 @@ function getIntentProfile(intent, topic, industry) {
       ]
     },
     competitor_comparison: {
-      executive: `This demo report compares <strong>${escapeHtml(topic)}</strong> through practical buyer criteria rather than brand preference. The strongest decision will come from comparing use case fit, cost, integration effort, trust, support, and switching risk.`,
+      executive: `This report compares <strong>${escapeHtml(topic)}</strong> through practical buyer criteria rather than brand preference. The strongest decision will come from comparing use case fit, cost, integration effort, trust, support, and switching risk.`,
       findings: [
         ["Decision criteria", "The comparison should start with the user's workflow, not vendor popularity."],
         ["Trade-off clarity", "Each option should be evaluated by where it is strongest and where it creates friction."],
@@ -1329,7 +1329,7 @@ function getIntentProfile(intent, topic, industry) {
       ]
     },
     product_strategy: {
-      executive: `This demo report treats <strong>${escapeHtml(topic)}</strong> as a product strategy question. The priority is deciding which customer problem deserves focus, what position the product should own, and what to build or avoid first.`,
+      executive: `This report treats <strong>${escapeHtml(topic)}</strong> as a product strategy question. The priority is deciding which customer problem deserves focus, what position the product should own, and what to build or avoid first.`,
       findings: [
         ["Positioning", "The product needs a sharp promise that a target customer can repeat in one sentence."],
         ["Scope control", "Early product strategy should reduce choices, not expand the feature list."],
@@ -1337,7 +1337,7 @@ function getIntentProfile(intent, topic, industry) {
       ]
     },
     learning_plan: {
-      executive: `This demo report turns <strong>${escapeHtml(topic)}</strong> into a structured learning plan. The objective is to move from vague interest to weekly outcomes, practice projects, feedback, and visible proof of skill.`,
+      executive: `This report turns <strong>${escapeHtml(topic)}</strong> into a structured learning plan. The objective is to move from vague interest to weekly outcomes, practice projects, feedback, and visible proof of skill.`,
       findings: [
         ["Weekly milestones", "A good plan defines what the learner can demonstrate each week."],
         ["Project evidence", "Practice projects should create portfolio artifacts, not just notes."],
@@ -1345,7 +1345,7 @@ function getIntentProfile(intent, topic, industry) {
       ]
     },
     investment_thesis: {
-      executive: `This demo report frames <strong>${escapeHtml(topic)}</strong> as an investment thesis draft. It separates thesis drivers, risks, valuation assumptions, evidence to verify, and decision triggers. It is not financial advice.`,
+      executive: `This report frames <strong>${escapeHtml(topic)}</strong> as an investment thesis draft. It separates thesis drivers, risks, valuation assumptions, evidence to verify, and decision triggers. It is not financial advice.`,
       findings: [
         ["Thesis drivers", "The strongest thesis identifies what must be true for upside to occur."],
         ["Risk boundaries", "Downside scenarios should be explicit before position sizing."],
@@ -1353,10 +1353,10 @@ function getIntentProfile(intent, topic, industry) {
       ]
     },
     general_research: {
-      executive: `This demo report organizes <strong>${escapeHtml(topic)}</strong> into a decision-ready research draft. It highlights useful signals, open assumptions, recommended evidence, and practical next steps without claiming live verification.`,
+      executive: `This report organizes <strong>${escapeHtml(topic)}</strong> into a decision-ready research draft. It highlights useful signals, open assumptions, recommended evidence, and practical next steps without claiming live verification.`,
       findings: [
         ["Clarify the question", "The most useful report starts by defining what decision the research should support."],
-        ["Separate evidence from assumptions", "Demo estimates should be treated as structure until checked against real sources."],
+        ["Separate evidence from assumptions", "Estimates should be treated as structure until checked against real sources."],
         ["Choose the next proof point", "The report should end with what to verify next, not more open-ended reading."]
       ]
     }
@@ -1410,7 +1410,7 @@ function getDynamicReportContent({ topic, seed, intent, industry }) {
   const industryProfile = getIndustryProfile(industry, topic);
   const label = industryLabel(industry);
   const fallbackCompetitors = [
-    ["Direct alternatives", "Comparable current solutions", "Limited context in demo mode", "Verify with live market research"],
+    ["Direct alternatives", "Comparable current solutions", "Limited source context", "Verify with live market research"],
     ["Manual workflow", "Existing user behavior", "Time-consuming and inconsistent", "Clarify what should be automated"],
     ["General tools", "Broad capability", "Weak fit for the exact job", "Win with focused execution"]
   ];
@@ -1557,7 +1557,7 @@ function getDynamicAdvantages(intent, industry, topic) {
 
 function getDynamicDisadvantages(intent, industry) {
   return [
-    ["Demo-only evidence", "The report does not use live sources, so important claims still need verification."],
+    ["Evidence limits", "The report may not use live sources, so important claims still need verification."],
     ["Prompt sensitivity", `The ${intentLabel(intent)} draft improves when the audience, geography, budget, or constraints are specific.`],
     ["Industry nuance", `${industryLabel(industry)} details may require local or expert validation before decisions are made.`]
   ];
@@ -1565,7 +1565,7 @@ function getDynamicDisadvantages(intent, industry) {
 
 function getDynamicLimitations(intent, industry) {
   return [
-    ["Estimated in demo mode", `This ${intentLabel(intent)} report uses local template logic and illustrative assumptions for the ${industryLabel(industry)} context.`],
+    ["Estimated draft", `This ${intentLabel(intent)} report uses available prompt context and illustrative assumptions for the ${industryLabel(industry)} context.`],
     ["Needs connected sources", "Live citations, current market data, official documents, interviews, and primary research would strengthen the final report."],
     ["Best used as a first draft", "Use this report to structure thinking, identify evidence gaps, and decide what to verify next."]
   ];
@@ -1633,7 +1633,7 @@ function buildReportHTML(data) {
   const competitorsHtml = competitorRows.map(([a, b, c, d]) =>
     `<tr><td>${escapeHtml(a)}</td><td>${escapeHtml(b)}</td><td>${escapeHtml(c)}</td><td>${escapeHtml(d)}</td></tr>`
   ).join("");
-  const competitorFallbackHtml = `<tr><td colspan="4">No structured comparison rows are available in this demo report.</td></tr>`;
+  const competitorFallbackHtml = `<tr><td colspan="4">No structured comparison rows are available in this report.</td></tr>`;
   const representativeHtml = representativeAlternatives(data).length
     ? `<p>Representative alternatives include:</p>
       <ul class="signal-list">
@@ -1643,11 +1643,11 @@ function buildReportHTML(data) {
 
   return `
     <section class="report-hero" id="summary">
-      <p class="eyebrow"><span aria-hidden="true"></span> Professional report draft</p>
+      <p class="eyebrow"><span aria-hidden="true"></span> Research report</p>
       <h1 id="reportMainTitle">${escapeHtml(data.title)}</h1>
       <p id="reportQuestion">Research question: "${escapeHtml(data.prompt)}"</p>
       <div class="report-stats">
-        <div><strong>Demo</strong><span>Estimate type</span></div>
+        <div><strong>Draft</strong><span>Estimate type</span></div>
         <div><strong>12</strong><span>Sections</span></div>
         <div><strong>${data.signals}</strong><span>Signals</span></div>
         <div><strong>${data.launchWindow}</strong><span>Execution window</span></div>
@@ -1660,7 +1660,7 @@ function buildReportHTML(data) {
           <p class="section-kicker">Executive Summary</p>
           <h2>What matters most</h2>
         </div>
-        <span>Demo analysis</span>
+        <span>Draft analysis</span>
       </div>
       <div class="executive-brief">
         <p>${data.executive}</p>
@@ -1766,7 +1766,7 @@ function buildReportHTML(data) {
         <span>Model estimate</span>
       </div>
       <div class="insight-grid">${financialHtml}</div>
-      <p class="report-disclaimer">Figures are illustrative estimates for demo purposes. Not financial advice.</p>
+      <p class="report-disclaimer">Figures are illustrative estimates. Not financial advice.</p>
     </section>
 
     <section class="report-section" id="action">
@@ -1786,10 +1786,10 @@ function buildReportHTML(data) {
           <p class="section-kicker">Source Guidance</p>
           <h2>Recommended evidence to verify</h2>
         </div>
-        <span>Demo mode</span>
+        <span>Evidence guidance</span>
       </div>
       <div class="insight-grid">${sourcesHtml}</div>
-      <p class="report-disclaimer">This demo suggests source categories only. It does not fetch, verify, or cite live sources yet.</p>
+      <p class="report-disclaimer">This report suggests source categories only. Verify important claims against primary sources before acting.</p>
     </section>
 
     <section class="report-section confidence-section" id="confidence">
@@ -1844,8 +1844,8 @@ function renderReport(data) {
   applyBarWidths(els.reportContent);
 
   els.reportTopTitle.textContent = currentReport.title;
-  els.reportMeta.textContent = `Generated ${relativeTime(currentReport.createdAt)} - 12 sections - demo estimates`;
-  els.metricConfidence.textContent = "Demo";
+  els.reportMeta.textContent = `Generated ${relativeTime(currentReport.createdAt)} - 12 sections - draft estimates`;
+  els.metricConfidence.textContent = "Draft";
   els.metricDepth.textContent = "Professional";
 
   buildTreeNav();
@@ -1915,7 +1915,7 @@ function updatePreview(prompt) {
   if (!prompt.trim()) {
     els.previewTitle.textContent = "Your Research Topic";
     els.previewScore.textContent = "-";
-    els.previewScore.setAttribute("aria-label", "Demo estimate preview not available yet");
+    els.previewScore.setAttribute("aria-label", "Report preview not available yet");
     els.previewMarket.textContent = "$-";
     els.previewCompetitors.textContent = "-";
     els.previewDemand.textContent = "-";
@@ -1925,8 +1925,8 @@ function updatePreview(prompt) {
 
   const data = reportController.createPreview(prompt);
   els.previewTitle.textContent = data.title;
-  els.previewScore.textContent = "Demo";
-  els.previewScore.setAttribute("aria-label", `Demo estimate preview using ${data.confidence} percent decorative completeness`);
+  els.previewScore.textContent = "Draft";
+  els.previewScore.setAttribute("aria-label", `Draft completeness preview using ${data.confidence} percent decorative completeness`);
   els.previewScore.style.setProperty("--score-pct", `${data.confidence}%`);
   els.previewMarket.textContent = data.marketSize;
   els.previewCompetitors.textContent = String(comparisonCount(data));
@@ -2069,15 +2069,15 @@ function startResearch() {
   }
 
   if (getUsage() >= FREE_LIMIT) {
-    showToast("Free demo limit reached (5/month). Paid plans are not active yet.", "warn");
+    showToast("Free report limit reached (5/month). Paid plans are not active yet.", "warn");
     return;
   }
 
   showInputError("");
   currentPrompt = prompt;
   els.loadingPrompt.textContent = researchAIConfig.generationMode === "gemini"
-    ? `Preparing a live AI report for "${prompt}". If live AI is unavailable, ResearchAI will show a local demo report instead.`
-    : `Demo mode: building a local sample report for "${prompt}". No web research is being performed.`;
+    ? `Preparing a live AI report for "${prompt}". If live AI is unavailable, ResearchAI will show a local sample report instead.`
+    : `Building a local sample report for "${prompt}". Live source verification is not being performed.`;
 
   showView("loading");
 
@@ -2126,7 +2126,7 @@ function startResearch() {
           renderReport(saved);
           showView("report");
           if (saved.aiFallback) {
-            showToast("Live AI is temporarily unavailable. Showing a demo report instead.", "warn");
+            showToast("Live AI is temporarily unavailable. Showing a sample report instead.", "warn");
           } else {
             showToast("Report generated successfully");
           }
@@ -2180,13 +2180,13 @@ function openPanel(name) {
     els.panelBody.innerHTML = `
       <div class="settings-group">
         <h3>Workspace</h3>
-        <p>Demo reports are stored locally in this browser. No data is sent to a server.</p>
+        <p>Reports are stored locally in this browser. No saved report data is sent to a server.</p>
         <button class="ghost-btn" type="button" id="clearHistoryBtn">Clear report history</button>
         <button class="ghost-btn danger-btn" type="button" id="resetUsageBtn">Reset usage counter</button>
       </div>
       <div class="settings-group">
         <h3>About</h3>
-        <p>ResearchAI Public Beta - demo mode. Reports are generated locally from templates and illustrative estimates. Live source verification is not active yet.</p>
+        <p>ResearchAI Public Beta. Reports may use live AI or local fallback generation. Live source verification is not active yet.</p>
         <p class="settings-version">Version 1.0.0-beta</p>
       </div>`;
     on(document.getElementById("clearHistoryBtn"), "click", () => {
@@ -2220,7 +2220,7 @@ function renderHistoryPanel(favoritesOnly) {
       <div class="empty-state">
         <div class="empty-icon" aria-hidden="true">${favoritesOnly ? "*" : "H"}</div>
         <h3>${favoritesOnly ? "No pinned reports yet" : "No saved reports yet"}</h3>
-        <p>${favoritesOnly ? "Pin important reports to keep them at the top of your workspace." : "Generate a local demo report and it will be saved here automatically."}</p>
+        <p>${favoritesOnly ? "Pin important reports to keep them at the top of your workspace." : "Generate a report and it will be saved here automatically."}</p>
       </div>`;
     return;
   }
@@ -2332,7 +2332,14 @@ function bindTopicButtons() {
 
 /* -- Exports -- */
 
+function hasRenderableReport() {
+  if (currentReport && els.reportContent?.innerText?.trim()) return true;
+  showToast("Generate a report first", "info");
+  return false;
+}
+
 async function copyReport() {
+  if (!hasRenderableReport()) return;
   try {
     await navigator.clipboard.writeText(els.reportContent.innerText);
     showToast("Report copied to clipboard");
@@ -2342,6 +2349,7 @@ async function copyReport() {
 }
 
 async function shareReport() {
+  if (!hasRenderableReport()) return;
   const data = {
     title: "ResearchAI Report",
     text: currentReport ? `Research report: ${currentReport.prompt}` : "ResearchAI Report",
@@ -2356,8 +2364,8 @@ async function shareReport() {
     }
   } else {
     try {
-      await navigator.clipboard.writeText(window.location.href);
-      showToast("Share link copied");
+      await navigator.clipboard.writeText(els.reportContent.innerText);
+      showToast("Report text copied for sharing");
     } catch {
       showToast("Share unavailable", "warn");
     }
@@ -2365,11 +2373,13 @@ async function shareReport() {
 }
 
 function exportPdf() {
-  showToast("Opening print dialog. Browser print can save as PDF.");
+  if (!hasRenderableReport()) return;
+  showToast("Opening print dialog. Choose Save as PDF in your browser to export.");
   setTimeout(() => window.print(), 400);
 }
 
 function exportDocx() {
+  if (!hasRenderableReport()) return;
   const blob = new Blob([els.reportContent.innerText], { type: "application/msword" });
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
@@ -2379,10 +2389,11 @@ function exportDocx() {
   link.click();
   link.remove();
   URL.revokeObjectURL(url);
-  showToast("Demo document exported as a basic .doc file");
+  showToast("Word-compatible .doc file exported");
 }
 
 function exportMarkdown() {
+  if (!hasRenderableReport()) return;
   const title = currentReport ? currentReport.title : "Research Report";
   const text = `# ${title}\n\n> ${currentPrompt}\n\n${els.reportContent.innerText.replace(/\n{3,}/g, "\n\n")}`;
   const blob = new Blob([text], { type: "text/markdown" });
@@ -2436,7 +2447,6 @@ function bindEvents() {
       showView("dashboard");
       setTimeout(() => {
         els.researchInput?.focus();
-        if (els.researchInput?.value.trim()) startResearch();
       }, 200);
     });
   });
@@ -2498,7 +2508,7 @@ function bindEvents() {
   on(els.startFreeBtn, "click", () => {
     showView("dashboard");
     els.researchInput?.focus();
-    showToast("Demo mode: 5 local reports per month");
+    showToast("Free plan: 5 reports per month");
   });
 
   on(els.copyReport, "click", copyReport);
