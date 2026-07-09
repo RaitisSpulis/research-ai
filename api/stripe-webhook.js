@@ -122,20 +122,6 @@ function getClerkUserIdFromInvoice(invoice) {
   );
 }
 
-function getSafeFirstSubscriptionItem(subscription = {}) {
-  const item = subscription?.items?.data?.[0];
-  if (!item) return null;
-  return {
-    id: item.id || null,
-    object: item.object || null,
-    current_period_start: item.current_period_start || null,
-    current_period_end: item.current_period_end || null,
-    subscription: item.subscription || null,
-    price: item.price?.id || null,
-    plan: item.plan?.id || null
-  };
-}
-
 function getSubscriptionUpdatePayload(userId, plan, subscription = {}) {
   const payload = {
     clerk_user_id: userId,
@@ -152,10 +138,7 @@ function getSubscriptionUpdatePayload(userId, plan, subscription = {}) {
 }
 
 function logSubscriptionUpdatePayload(payload) {
-  console.log("[Subscription updated] Supabase update payload", {
-    keys: Object.keys(payload),
-    values: payload
-  });
+  console.log("[Subscription updated] Supabase update payload keys", Object.keys(payload));
 }
 
 async function resolveUserIdForSubscription(subscription = {}) {
@@ -231,11 +214,8 @@ async function syncSubscriptionToClerkAndSupabase(userId, plan, subscription = {
   console.log("[Subscription sync] current_period_end", subscription.currentPeriodEnd || null);
   if (subscription.debugUpdatePayload) {
     console.log("[Subscription updated] Supabase update response", {
-      clerk_user_id: updatedUser?.clerk_user_id || null,
       plan: updatedUser?.plan || null,
       subscription_status: updatedUser?.subscription_status || null,
-      stripe_customer_id: updatedUser?.stripe_customer_id || null,
-      stripe_subscription_id: updatedUser?.stripe_subscription_id || null,
       cancel_at_period_end: Boolean(updatedUser?.cancel_at_period_end),
       current_period_end: updatedUser?.current_period_end || null
     });
@@ -264,18 +244,11 @@ async function handleCheckoutCompleted(session) {
 async function handleSubscriptionUpdated(subscription, eventId = "", eventApiVersion = "") {
   console.log("[Subscription updated] event api_version", eventApiVersion || null);
   console.log("[Subscription updated] event id", eventId || null);
-  console.log("[Subscription updated] object keys", Object.keys(subscription || {}));
   console.log("[Subscription updated] subscription id", subscription?.id || null);
   console.log("[Subscription updated] customer id", subscription?.customer || null);
   console.log("[Subscription updated] status", subscription?.status || null);
-  console.log("[Subscription updated] cancel_at_period_end value", subscription?.cancel_at_period_end);
-  console.log("[Subscription updated] cancel_at_period_end typeof", typeof subscription?.cancel_at_period_end);
+  console.log("[Subscription updated] cancel_at_period_end", Boolean(subscription?.cancel_at_period_end));
   console.log("[Subscription updated] cancel_at", subscription?.cancel_at || null);
-  console.log("[Subscription updated] canceled_at", subscription?.canceled_at || null);
-  console.log("[Subscription updated] subscription.current_period_end", subscription?.current_period_end || null);
-  console.log("[Subscription updated] subscription.items.data.length", Array.isArray(subscription?.items?.data) ? subscription.items.data.length : null);
-  console.log("[Subscription updated] first item", getSafeFirstSubscriptionItem(subscription));
-  console.log("[Subscription updated] first item current_period_end", subscription?.items?.data?.[0]?.current_period_end || null);
   const timing = getSubscriptionTiming(subscription);
   console.log("[Subscription updated] current_period_end", timing.currentPeriodEnd || null);
   console.log("[Subscription updated] current_period_end source", timing.currentPeriodEndPath);
@@ -420,7 +393,6 @@ module.exports._test = {
   getSubscriptionSyncStatus,
   getSubscriptionTiming,
   getStripeTimestampWithPath,
-  getSafeFirstSubscriptionItem,
   isSubscriptionScheduledToCancel,
   getSubscriptionUpdatePayload,
   handleSubscriptionUpdated,

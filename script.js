@@ -616,9 +616,38 @@ async function syncBillingStatus() {
     return payload.billing || null;
   } catch (error) {
     console.warn("[ResearchAI] billing sync unavailable:", error);
-    showToast("Billing status could not be refreshed. Please try again shortly.", "warn");
     return null;
   }
+}
+
+function getBillingStateSignature(billing = billingState) {
+  return [
+    billing?.plan || "",
+    billing?.subscriptionStatus || billing?.subscription_status || "",
+    Boolean(billing?.cancelAtPeriodEnd || billing?.cancel_at_period_end),
+    billing?.currentPeriodEnd || billing?.current_period_end || ""
+  ].join("|");
+}
+
+function wait(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+async function syncBillingStatusWithRetry(maxAttempts = 5) {
+  const initialSignature = getBillingStateSignature();
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    const billing = await syncBillingStatus();
+    if (billing && getBillingStateSignature(billing) !== initialSignature) {
+      return billing;
+    }
+
+    if (attempt < maxAttempts) {
+      await wait(2000);
+    }
+  }
+
+  return null;
 }
 
 function normalizeReport(report) {
@@ -3232,9 +3261,8 @@ async function handleCheckoutReturn() {
   const billingStatus = getBillingReturnStatus();
   if (billingStatus === "returned") {
     await reloadClerkUser();
-    await syncBillingStatus();
+    await syncBillingStatusWithRetry();
     await refreshServerUsage();
-    showToast("Billing details refreshed.");
   }
 }
 
@@ -3297,7 +3325,7 @@ async function startBillingPortal(event) {
     return;
   }
 
-  const button = event?.currentTarget || document.getElementById("manageBillingBtn") || document.getElementById("resumeBillingBtn");
+  const button = event?.currentTarget || document.getElementById("manageBillingBtn");
   if (button) {
     button.disabled = true;
     button.textContent = "Opening billing...";
@@ -3319,27 +3347,7 @@ async function startBillingPortal(event) {
     showToast(error.message || "Billing Portal is temporarily unavailable.", "warn");
     if (button) {
       button.disabled = false;
-      button.textContent = button.id === "resumeBillingBtn" ? "Resume Subscription" : "Manage Subscription";
-    }
-  }
-}
-
-async function refreshBillingStatus(event) {
-  const button = event?.currentTarget || document.getElementById("refreshBillingBtn");
-  if (button) {
-    button.disabled = true;
-    button.textContent = "Refreshing...";
-  }
-
-  try {
-    await reloadClerkUser();
-    await syncBillingStatus();
-    await refreshServerUsage();
-    showToast("Billing status refreshed.");
-  } finally {
-    if (button) {
-      button.disabled = false;
-      button.textContent = "Refresh billing status";
+      button.textContent = "Manage Subscription";
     }
   }
 }
@@ -3667,8 +3675,11 @@ function renderBillingSettingsSection() {
   if (hasManageableBilling()) {
     const renewalLabel = billingState.cancelAtPeriodEnd ? "Subscription ends" : "Next Renewal";
     const renewalText = formatBillingDate(billingState.currentPeriodEnd);
-    const resumeButton = billingState.cancelAtPeriodEnd
-      ? `<button class="ghost-btn" type="button" id="resumeBillingBtn">Resume Subscription</button>`
+    const endRow = billingState.cancelAtPeriodEnd
+      ? `<div class="billing-row">
+          <span>${escapeHtml(renewalLabel)}</span>
+          <strong>${escapeHtml(renewalText)}</strong>
+        </div>`
       : "";
     return `
       <div class="settings-group billing-settings">
@@ -3681,13 +3692,8 @@ function renderBillingSettingsSection() {
           <span>Subscription Status</span>
           <strong>${escapeHtml(status)}</strong>
         </div>
-        <div class="billing-row">
-          <span>${escapeHtml(renewalLabel)}</span>
-          <strong>${escapeHtml(renewalText)}</strong>
-        </div>
+        ${endRow}
         <button class="accent-btn" type="button" id="manageBillingBtn">Manage Subscription</button>
-        ${resumeButton}
-        <button class="ghost-btn" type="button" id="refreshBillingBtn">Refresh billing status</button>
         <p>Manage payment method, invoices, billing history and cancellation through Stripe.</p>
       </div>`;
   }
@@ -3754,8 +3760,6 @@ function openPanel(name) {
         if (billingSection) {
           billingSection.outerHTML = renderBillingSettingsSection();
           on(document.getElementById("manageBillingBtn"), "click", startBillingPortal);
-          on(document.getElementById("resumeBillingBtn"), "click", startBillingPortal);
-          on(document.getElementById("refreshBillingBtn"), "click", refreshBillingStatus);
           on(document.getElementById("settingsUpgradeBtn"), "click", startProCheckout);
         }
       }
@@ -3776,8 +3780,6 @@ function openPanel(name) {
       });
     }
     on(document.getElementById("manageBillingBtn"), "click", startBillingPortal);
-    on(document.getElementById("resumeBillingBtn"), "click", startBillingPortal);
-    on(document.getElementById("refreshBillingBtn"), "click", refreshBillingStatus);
     on(document.getElementById("settingsUpgradeBtn"), "click", startProCheckout);
   }
 
