@@ -141,10 +141,44 @@ function unixTimestampToIso(value) {
   return new Date(seconds * 1000).toISOString();
 }
 
+function getStripeTimestampWithPath(subscription = {}) {
+  if (subscription.current_period_end) {
+    return {
+      value: subscription.current_period_end,
+      path: "current_period_end"
+    };
+  }
+
+  const item = Array.isArray(subscription.items?.data)
+    ? subscription.items.data.find(entry => entry?.current_period_end)
+    : null;
+
+  if (item?.current_period_end) {
+    return {
+      value: item.current_period_end,
+      path: "items.data[].current_period_end"
+    };
+  }
+
+  if (subscription.current_period?.end) {
+    return {
+      value: subscription.current_period.end,
+      path: "current_period.end"
+    };
+  }
+
+  return {
+    value: null,
+    path: "none"
+  };
+}
+
 function getSubscriptionTiming(subscription = {}) {
+  const periodEnd = getStripeTimestampWithPath(subscription);
   return {
     cancelAtPeriodEnd: Boolean(subscription.cancel_at_period_end),
-    currentPeriodEnd: unixTimestampToIso(subscription.current_period_end)
+    currentPeriodEnd: unixTimestampToIso(periodEnd.value),
+    currentPeriodEndPath: periodEnd.path
   };
 }
 
@@ -229,7 +263,9 @@ async function handleSubscriptionUpdated(subscription) {
   console.log("[Subscription updated] customer id", subscription?.customer || null);
   console.log("[Subscription updated] status", subscription?.status || null);
   console.log("[Subscription updated] cancel_at_period_end", Boolean(subscription?.cancel_at_period_end));
-  console.log("[Subscription updated] current_period_end", subscription?.current_period_end || null);
+  const timing = getSubscriptionTiming(subscription);
+  console.log("[Subscription updated] current_period_end", timing.currentPeriodEnd || null);
+  console.log("[Subscription updated] current_period_end source", timing.currentPeriodEndPath);
 
   const resolved = await resolveUserIdForSubscription(subscription);
   const userId = resolved.userId;
@@ -241,7 +277,6 @@ async function handleSubscriptionUpdated(subscription) {
   }
 
   const syncStatus = getSubscriptionSyncStatus(subscription);
-  const timing = getSubscriptionTiming(subscription);
   await syncSubscriptionToClerkAndSupabase(userId, syncStatus.plan, {
     customerId: subscription?.customer || "",
     subscriptionId: subscription?.id || "",
@@ -368,6 +403,7 @@ module.exports._test = {
   getSubscriptionPlan,
   getSubscriptionSyncStatus,
   getSubscriptionTiming,
+  getStripeTimestampWithPath,
   handleSubscriptionUpdated,
   resolveUserIdForSubscription,
   unixTimestampToIso,
