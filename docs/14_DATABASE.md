@@ -197,6 +197,6 @@ Developer Mode can still bypass browser display limits locally, but production r
 
 ## Notes
 
-This sprint uses Supabase REST with the service role key inside Vercel Functions only. Row Level Security can be enabled later for direct client access, but the current beta architecture intentionally keeps database writes server-side.
+This sprint uses Supabase REST with the service role key inside Vercel Functions only. Row Level Security should be enabled before public beta using the migration above, even though the current beta architecture intentionally keeps database reads and writes server-side.
 
 For higher-concurrency launches, replace the read-then-upsert usage increment with a PostgreSQL RPC that atomically checks and increments usage in a single transaction.

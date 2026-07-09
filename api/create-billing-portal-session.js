@@ -28,6 +28,10 @@ function isProSupabaseUser(user) {
   return user?.plan === "pro" || user?.subscription_status === "active" || user?.subscription_status === "trialing";
 }
 
+function hasManageableSubscriptionStatus(status) {
+  return ["active", "trialing", "past_due", "unpaid"].includes(String(status || ""));
+}
+
 async function resolveBillingCustomer(clerkUser) {
   const userId = clerkUser?.sub;
   if (!userId) {
@@ -56,7 +60,9 @@ async function resolveBillingCustomer(clerkUser) {
     subscriptionStatus = subscriptionStatus || clerkApiUser?.public_metadata?.subscriptionStatus || clerkApiUser?.private_metadata?.subscriptionStatus || "";
   }
 
-  if (!pro) {
+  const canManageBilling = pro || hasManageableSubscriptionStatus(subscriptionStatus);
+
+  if (!canManageBilling) {
     const error = new Error("Billing Portal is available for Pro subscribers.");
     error.code = "pro_required";
     throw error;

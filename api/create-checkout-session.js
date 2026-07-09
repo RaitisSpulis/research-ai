@@ -28,16 +28,13 @@ function parseBody(request) {
 
 function validateCheckoutRequest(body) {
   if (!body) return "Request body must be valid JSON.";
-  if (typeof body.userId !== "string" || !body.userId.trim()) {
-    return "Authenticated user id is required.";
-  }
   if (body.email && typeof body.email !== "string") {
     return "User email must be a string.";
   }
   return "";
 }
 
-async function getValidatedCheckoutUser(request, userId) {
+async function getValidatedCheckoutUser(request) {
   const token = getAuthToken(request);
   if (!token) {
     const error = new Error("Authentication token is required.");
@@ -48,11 +45,6 @@ async function getValidatedCheckoutUser(request, userId) {
   const payload = await verifyClerkToken(token);
   if (!payload?.sub) {
     const error = new Error("Authentication token is invalid.");
-    error.code = "unauthorized";
-    throw error;
-  }
-  if (payload.sub !== userId) {
-    const error = new Error("Authenticated user does not match checkout user.");
     error.code = "unauthorized";
     throw error;
   }
@@ -148,7 +140,7 @@ module.exports = async function handler(request, response) {
 
   let checkoutUser;
   try {
-    checkoutUser = await getValidatedCheckoutUser(request, body.userId.trim());
+    checkoutUser = await getValidatedCheckoutUser(request);
   } catch (error) {
     sendError(response, 401, "unauthorized", error.message || "Authentication is required.");
     return;

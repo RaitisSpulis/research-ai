@@ -15,6 +15,11 @@ const {
   upsertUser
 } = require("./_supabase");
 
+const MAX_REPORT_JSON_BYTES = 160000;
+const MAX_REPORT_ID_LENGTH = 180;
+const MAX_REPORT_TITLE_LENGTH = 240;
+const MAX_REPORT_PROMPT_LENGTH = 2000;
+
 function parseBody(request) {
   if (!request.body) return {};
   if (typeof request.body === "object") return request.body;
@@ -23,6 +28,51 @@ function parseBody(request) {
   } catch {
     return null;
   }
+}
+
+function jsonByteLength(value) {
+  try {
+    return Buffer.byteLength(JSON.stringify(value), "utf8");
+  } catch {
+    return Number.POSITIVE_INFINITY;
+  }
+}
+
+function validateReportPayload(report) {
+  if (!report || typeof report !== "object" || Array.isArray(report)) {
+    return "Report data is required.";
+  }
+
+  if (jsonByteLength(report) > MAX_REPORT_JSON_BYTES) {
+    return "Report data is too large to save.";
+  }
+
+  if (report.id !== undefined && String(report.id).length > MAX_REPORT_ID_LENGTH) {
+    return "Report id is too long.";
+  }
+
+  if (report.title !== undefined && String(report.title).length > MAX_REPORT_TITLE_LENGTH) {
+    return "Report title is too long.";
+  }
+
+  const prompt = report.prompt || report.userPrompt || "";
+  if (prompt !== undefined && String(prompt).length > MAX_REPORT_PROMPT_LENGTH) {
+    return "Report prompt is too long.";
+  }
+
+  return "";
+}
+
+function validateReportId(id) {
+  if (typeof id !== "string" || !id.trim()) {
+    return "Report id is required.";
+  }
+
+  if (id.length > MAX_REPORT_ID_LENGTH) {
+    return "Report id is too long.";
+  }
+
+  return "";
 }
 
 async function authenticate(request, response) {
@@ -90,8 +140,9 @@ module.exports = async function handler(request, response) {
 
     if (request.method === "POST") {
       const body = parseBody(request);
-      if (!body || typeof body.report !== "object") {
-        sendError(response, 400, "invalid_request", "Report data is required.");
+      const validationError = validateReportPayload(body?.report);
+      if (validationError) {
+        sendError(response, 400, "invalid_request", validationError);
         return;
       }
 
@@ -108,8 +159,9 @@ module.exports = async function handler(request, response) {
 
     if (request.method === "PATCH") {
       const body = parseBody(request);
-      if (!body || typeof body.id !== "string") {
-        sendError(response, 400, "invalid_request", "Report id is required.");
+      const validationError = validateReportId(body?.id);
+      if (validationError) {
+        sendError(response, 400, "invalid_request", validationError);
         return;
       }
 
@@ -121,8 +173,9 @@ module.exports = async function handler(request, response) {
 
     if (request.method === "DELETE") {
       const body = parseBody(request);
-      if (!body || typeof body.id !== "string") {
-        sendError(response, 400, "invalid_request", "Report id is required.");
+      const validationError = validateReportId(body?.id);
+      if (validationError) {
+        sendError(response, 400, "invalid_request", validationError);
         return;
       }
 

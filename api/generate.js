@@ -6,6 +6,7 @@ const { isUserPro } = require("./_auth");
 const { rejectDisallowedOrigin } = require("./_security");
 
 const MAX_PROMPT_LENGTH = 500;
+const MAX_GENERATE_BODY_BYTES = 12000;
 
 function parseBody(request) {
   if (!request.body) return {};
@@ -19,6 +20,14 @@ function parseBody(request) {
 
 function validateGenerateRequest(body) {
   if (!body) {
+    return "Request body must be valid JSON.";
+  }
+
+  try {
+    if (Buffer.byteLength(JSON.stringify(body), "utf8") > MAX_GENERATE_BODY_BYTES) {
+      return "Request body is too large.";
+    }
+  } catch {
     return "Request body must be valid JSON.";
   }
 

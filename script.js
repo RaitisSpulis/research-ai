@@ -198,6 +198,14 @@ function isProUser() {
   return authState.signedIn && authState.isPro;
 }
 
+function hasManageableBilling() {
+  return authState.signedIn && (
+    isProUser() ||
+    ["past_due", "unpaid"].includes(String(billingState.subscriptionStatus || "")) ||
+    (billingState.stripeCustomerConnected && billingState.plan !== "free")
+  );
+}
+
 function updateAuthStateFromClerk() {
   const clerk = authState.clerk;
   const user = clerk?.user || null;
@@ -3228,10 +3236,7 @@ async function startProCheckout() {
         "Content-Type": "application/json",
         Authorization: `Bearer ${token}`
       },
-      body: JSON.stringify({
-        userId: authState.userId,
-        email: authState.email
-      })
+      body: JSON.stringify({})
     });
     const payload = await response.json().catch(() => null);
 
@@ -3262,7 +3267,7 @@ async function startBillingPortal() {
     return;
   }
 
-  if (!isProUser()) {
+  if (!hasManageableBilling()) {
     showToast("Billing Portal is available for Pro subscribers.", "info");
     return;
   }
@@ -3599,10 +3604,10 @@ function formatSubscriptionStatus(status) {
 }
 
 function renderBillingSettingsSection() {
-  const plan = isProUser() ? "Pro" : "Free";
+  const plan = isProUser() ? "Pro" : billingState.plan === "past_due" ? "Past Due" : "Free";
   const status = formatSubscriptionStatus(billingState.subscriptionStatus);
 
-  if (isProUser()) {
+  if (hasManageableBilling()) {
     const renewalText = billingState.subscriptionStatus
       ? "Renewal and invoice dates are available inside Stripe Billing Portal."
       : "Renewal details are available inside Stripe Billing Portal.";
