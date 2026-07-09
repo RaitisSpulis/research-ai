@@ -31,7 +31,6 @@ if (typeof module !== "undefined" && module.exports) {
 
 const researchAIConfig = {
   generationMode: "gemini",
-  clerkPublishableKey: "",
   api: {
     generateEndpoint: "/api/generate",
     checkoutEndpoint: "/api/create-checkout-session",
@@ -126,17 +125,6 @@ function on(element, event, handler) {
   if (element) element.addEventListener(event, handler);
 }
 
-function getClerkPublishableKey() {
-  return (
-    researchAIConfig.clerkPublishableKey ||
-    window.RESEARCHAI_CLERK_PUBLISHABLE_KEY ||
-    window.CLERK_PUBLISHABLE_KEY ||
-    window.VITE_CLERK_PUBLISHABLE_KEY ||
-    document.querySelector("meta[name='clerk-publishable-key']")?.content ||
-    ""
-  ).trim();
-}
-
 async function fetchPublicConfig() {
   try {
     const response = await fetch(researchAIConfig.api.publicConfigEndpoint, {
@@ -150,18 +138,6 @@ async function fetchPublicConfig() {
     console.warn("[ResearchAI] public config unavailable:", error);
     return {};
   }
-}
-
-async function resolveClerkPublishableKey() {
-  const localKey = getClerkPublishableKey();
-  if (localKey) return localKey;
-
-  const config = await fetchPublicConfig();
-  const remoteKey = (config.clerkPublishableKey || config.CLERK_PUBLISHABLE_KEY || config.VITE_CLERK_PUBLISHABLE_KEY || "").trim();
-  if (remoteKey) {
-    researchAIConfig.clerkPublishableKey = remoteKey;
-  }
-  return remoteKey;
 }
 
 function getPrimaryEmail(user) {
@@ -243,34 +219,69 @@ function updateProUpgradeUI() {
   }
 }
 
-function loadClerkScript() {
-  if (window.Clerk) return Promise.resolve(window.Clerk);
+function deriveClerkFrontendApi(publishableKey) {
+  try {
+    return atob(publishableKey.split("_")[2]).slice(0, -1);
+  } catch {
+    return "";
+  }
+}
 
+function loadScriptOnce(src, attributes = {}) {
   return new Promise((resolve, reject) => {
-    const existingScript = document.querySelector("script[data-researchai-clerk]");
+    const existingScript = document.querySelector(`script[src="${src}"]`);
     if (existingScript) {
-      existingScript.addEventListener("load", () => resolve(window.Clerk || null), { once: true });
-      existingScript.addEventListener("error", () => reject(new Error("ClerkJS failed to load.")), { once: true });
+      resolve(existingScript);
       return;
     }
 
     const script = document.createElement("script");
-    script.src = "https://cdn.jsdelivr.net/npm/@clerk/clerk-js@latest/dist/clerk.browser.js";
+    script.src = src;
     script.async = true;
     script.crossOrigin = "anonymous";
-    script.dataset.researchaiClerk = "true";
-    script.addEventListener("load", () => resolve(window.Clerk || null), { once: true });
-    script.addEventListener("error", () => reject(new Error("ClerkJS failed to load.")), { once: true });
+    Object.entries(attributes).forEach(([key, value]) => {
+      script.setAttribute(key, value);
+    });
+    script.addEventListener("load", () => resolve(script), { once: true });
+    script.addEventListener("error", () => reject(new Error(`Failed to load script: ${src}`)), { once: true });
     document.head.appendChild(script);
   });
 }
 
+async function loadClerkWithPublishableKey(publishableKey) {
+  const clerkDomain = deriveClerkFrontendApi(publishableKey);
+  if (!clerkDomain) {
+    throw new Error("Clerk publishable key could not derive Frontend API domain.");
+  }
+
+  await loadScriptOnce(`https://${clerkDomain}/npm/@clerk/ui@1/dist/ui.browser.js`);
+  await loadScriptOnce(`https://${clerkDomain}/npm/@clerk/clerk-js@6/dist/clerk.browser.js`, {
+    "data-clerk-publishable-key": publishableKey
+  });
+
+  if (!window.Clerk) {
+    throw new Error("ClerkJS did not load.");
+  }
+
+  await window.Clerk.load({
+    ui: { ClerkUI: window.__internal_ClerkUICtor }
+  });
+
+  return window.Clerk;
+}
+
 async function initAuth() {
+  if (authInitPromise) return authInitPromise;
+  authInitPromise = initAuthOnce();
+  return authInitPromise;
+}
+
+async function initAuthOnce() {
   authState.ready = false;
   authState.configured = false;
   updateAuthUI();
 
-  const config = await fetch(researchAIConfig.api.publicConfigEndpoint).then(response => response.json()).catch(error => {
+  const config = await fetchPublicConfig().catch(error => {
     console.warn("[ResearchAI] public config unavailable:", error);
     return {};
   });
@@ -287,11 +298,8 @@ async function initAuth() {
   }
 
   try {
-    const clerk = await loadClerkScript();
-    if (!clerk) throw new Error("ClerkJS did not load.");
-
     console.log("[ResearchAI] Clerk key prefix", publishableKey.slice(0, 8));
-    await clerk.load({ publishableKey });
+    const clerk = await loadClerkWithPublishableKey(publishableKey);
 
     authState.clerk = clerk;
     authState.ready = true;
@@ -346,6 +354,7 @@ let currentReport = null;
 let continuePrompt = "";
 let loadingInterval = null;
 let toastTimer = null;
+let authInitPromise = null;
 const authState = {
   ready: false,
   configured: false,

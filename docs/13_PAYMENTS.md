@@ -23,7 +23,7 @@ Do not add secret keys to frontend code, Git, or public documentation. Clerk pub
 3. Copy the publishable key.
 4. In Vercel, set `CLERK_PUBLISHABLE_KEY` for Production, Preview, and Development as needed.
 5. ResearchAI exposes this public value to the browser through `GET /api/public-config`.
-6. The frontend also supports a `clerk-publishable-key` meta tag or `window.RESEARCHAI_CLERK_PUBLISHABLE_KEY` for local/manual testing.
+6. The frontend loads Clerk from the Clerk Frontend API domain derived from the publishable key.
 7. Do not place `CLERK_SECRET_KEY` in frontend code.
 
 Current frontend auth behavior:
