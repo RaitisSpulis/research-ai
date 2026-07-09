@@ -35,6 +35,7 @@ const researchAIConfig = {
     generateEndpoint: "/api/generate",
     checkoutEndpoint: "/api/create-checkout-session",
     billingPortalEndpoint: "/api/create-billing-portal-session",
+    billingSyncEndpoint: "/api/sync-billing-status",
     publicConfigEndpoint: "/api/public-config",
     reportsEndpoint: "/api/reports",
     usageEndpoint: "/api/usage",
@@ -600,6 +601,22 @@ async function refreshServerUsage() {
     return payload.usage || null;
   } catch (error) {
     console.warn("[ResearchAI] usage sync unavailable:", error);
+    return null;
+  }
+}
+
+async function syncBillingStatus() {
+  if (!authState.signedIn || isDeveloperMode()) return null;
+  try {
+    const payload = await authenticatedApi(researchAIConfig.api.billingSyncEndpoint, {
+      method: "POST",
+      body: JSON.stringify({})
+    });
+    applyBillingState(payload.billing);
+    return payload.billing || null;
+  } catch (error) {
+    console.warn("[ResearchAI] billing sync unavailable:", error);
+    showToast("Billing status could not be refreshed. Please try again shortly.", "warn");
     return null;
   }
 }
@@ -3215,6 +3232,7 @@ async function handleCheckoutReturn() {
   const billingStatus = getBillingReturnStatus();
   if (billingStatus === "returned") {
     await reloadClerkUser();
+    await syncBillingStatus();
     await refreshServerUsage();
     showToast("Billing details refreshed.");
   }
@@ -3302,6 +3320,26 @@ async function startBillingPortal(event) {
     if (button) {
       button.disabled = false;
       button.textContent = button.id === "resumeBillingBtn" ? "Resume Subscription" : "Manage Subscription";
+    }
+  }
+}
+
+async function refreshBillingStatus(event) {
+  const button = event?.currentTarget || document.getElementById("refreshBillingBtn");
+  if (button) {
+    button.disabled = true;
+    button.textContent = "Refreshing...";
+  }
+
+  try {
+    await reloadClerkUser();
+    await syncBillingStatus();
+    await refreshServerUsage();
+    showToast("Billing status refreshed.");
+  } finally {
+    if (button) {
+      button.disabled = false;
+      button.textContent = "Refresh billing status";
     }
   }
 }
@@ -3649,6 +3687,7 @@ function renderBillingSettingsSection() {
         </div>
         <button class="accent-btn" type="button" id="manageBillingBtn">Manage Subscription</button>
         ${resumeButton}
+        <button class="ghost-btn" type="button" id="refreshBillingBtn">Refresh billing status</button>
         <p>Manage payment method, invoices, billing history and cancellation through Stripe.</p>
       </div>`;
   }
@@ -3716,6 +3755,7 @@ function openPanel(name) {
           billingSection.outerHTML = renderBillingSettingsSection();
           on(document.getElementById("manageBillingBtn"), "click", startBillingPortal);
           on(document.getElementById("resumeBillingBtn"), "click", startBillingPortal);
+          on(document.getElementById("refreshBillingBtn"), "click", refreshBillingStatus);
           on(document.getElementById("settingsUpgradeBtn"), "click", startProCheckout);
         }
       }
@@ -3737,6 +3777,7 @@ function openPanel(name) {
     }
     on(document.getElementById("manageBillingBtn"), "click", startBillingPortal);
     on(document.getElementById("resumeBillingBtn"), "click", startBillingPortal);
+    on(document.getElementById("refreshBillingBtn"), "click", refreshBillingStatus);
     on(document.getElementById("settingsUpgradeBtn"), "click", startProCheckout);
   }
 

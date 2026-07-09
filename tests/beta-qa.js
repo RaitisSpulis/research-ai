@@ -35,6 +35,7 @@ async function testClerkTokenBasics() {
 }
 
 function testStripeWebhookSignature() {
+  const { getSubscriptionState } = require("../api/_billing-state");
   const { constructStripeEvent, getSubscriptionTiming, verifyStripeSignature } = require("../api/stripe-webhook")._test;
   const secret = "whsec_test_secret";
   const payload = JSON.stringify({
@@ -75,6 +76,22 @@ function testStripeWebhookSignature() {
   assert.strictEqual(cancelAtTiming.cancelAtPeriodEnd, true);
   assert.strictEqual(cancelAtTiming.currentPeriodEnd, "2026-08-09T00:00:00.000Z");
   assert.strictEqual(cancelAtTiming.currentPeriodEndPath, "cancel_at");
+
+  assert.deepStrictEqual(getSubscriptionState({
+    status: "active",
+    cancel_at: 1786233600
+  }), {
+    plan: "pro",
+    status: "cancelling",
+    cancelAtPeriodEnd: true,
+    currentPeriodEnd: "2026-08-09T00:00:00.000Z",
+    currentPeriodEndPath: "cancel_at"
+  });
+  assert.strictEqual(getSubscriptionState({ status: "active" }).status, "active");
+  assert.strictEqual(getSubscriptionState({ status: "active" }).plan, "pro");
+  assert.strictEqual(getSubscriptionState({ status: "past_due" }).plan, "past_due");
+  assert.strictEqual(getSubscriptionState({ status: "canceled" }).plan, "free");
+  assert.strictEqual(getSubscriptionState({ status: "canceled" }).status, "canceled");
 }
 
 async function testSupabaseUsageAndOwnershipQueries() {
@@ -266,6 +283,92 @@ async function testSubscriptionUpdatedFailsWhenNoUserRowUpdated() {
   }
 }
 
+async function testBillingSyncEndpointStateAndFallback() {
+  const { chooseNewestRelevantSubscription, syncBillingStatusForUser } = require("../api/sync-billing-status")._test;
+  process.env.SUPABASE_URL = "https://supabase.test";
+  process.env.SUPABASE_SERVICE_ROLE_KEY = "service_role_test";
+  process.env.CLERK_SECRET_KEY = "clerk_secret_test";
+  process.env.STRIPE_SECRET_KEY = "stripe_secret_test";
+
+  const chosen = chooseNewestRelevantSubscription([
+    { id: "sub_old", status: "canceled", created: 10 },
+    { id: "sub_new", status: "active", created: 20 }
+  ]);
+  assert.strictEqual(chosen.id, "sub_new");
+
+  const originalFetch = global.fetch;
+  const calls = [];
+  global.fetch = async (url, options = {}) => {
+    const requestUrl = String(url);
+    calls.push({ url: requestUrl, options });
+
+    if (requestUrl.includes("/rest/v1/users?clerk_user_id=eq.user_sync") && options.method !== "PATCH") {
+      return {
+        ok: true,
+        status: 200,
+        text: async () => JSON.stringify([{
+          clerk_user_id: "user_sync",
+          stripe_customer_id: "cus_sync",
+          stripe_subscription_id: ""
+        }])
+      };
+    }
+
+    if (requestUrl.startsWith("https://api.clerk.com")) {
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({ id: "user_sync" })
+      };
+    }
+
+    if (requestUrl.includes("https://api.stripe.com/v1/subscriptions?customer=cus_sync")) {
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({
+          data: [{
+            id: "sub_sync",
+            customer: "cus_sync",
+            status: "active",
+            created: 99,
+            cancel_at: 1786233600,
+            cancel_at_period_end: false,
+            items: { data: [{ current_period_end: 1786233600 }] }
+          }]
+        })
+      };
+    }
+
+    if (requestUrl.includes("/rest/v1/users?clerk_user_id=eq.user_sync") && options.method === "PATCH") {
+      const body = JSON.parse(options.body);
+      return {
+        ok: true,
+        status: 200,
+        text: async () => JSON.stringify([{ clerk_user_id: "user_sync", ...body }])
+      };
+    }
+
+    return { ok: true, status: 200, text: async () => "[]" };
+  };
+
+  try {
+    const billing = await syncBillingStatusForUser("user_sync");
+    assert.strictEqual(billing.plan, "pro");
+    assert.strictEqual(billing.subscriptionStatus, "cancelling");
+    assert.strictEqual(billing.cancelAtPeriodEnd, true);
+    assert.strictEqual(billing.currentPeriodEnd, "2026-08-09T00:00:00.000Z");
+    assert(calls.some(call => call.url.includes("/v1/subscriptions?customer=cus_sync")));
+    const update = calls.find(call => call.url.includes("/rest/v1/users?clerk_user_id=eq.user_sync") && call.options.method === "PATCH");
+    assert(update);
+    const body = JSON.parse(update.options.body);
+    assert.strictEqual(body.subscription_status, "cancelling");
+    assert.strictEqual(body.cancel_at_period_end, true);
+  } finally {
+    global.fetch = originalFetch;
+  }
+}
+
 async function testGenerateAuthAndDemoFlow() {
   const handler = require("../api/generate");
   const originalFetch = global.fetch;
@@ -312,6 +415,7 @@ async function main() {
   await testSupabaseUsageAndOwnershipQueries();
   await testSubscriptionUpdatedCancellationLookup();
   await testSubscriptionUpdatedFailsWhenNoUserRowUpdated();
+  await testBillingSyncEndpointStateAndFallback();
   await testGenerateAuthAndDemoFlow();
   testFrontendStaticSmoke();
   console.log("beta QA mocks passed");
