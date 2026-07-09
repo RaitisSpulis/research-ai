@@ -403,6 +403,7 @@ function testFrontendStaticSmoke() {
   assert(script.includes("function escapeHtml"));
   assert(script.includes("startBillingPortal"));
   assert(script.includes("billingPortalEndpoint"));
+  assert(script.includes("Sign in to track monthly usage."));
   assert(index.includes("proCheckoutBtn"));
   assert(!script.includes("STRIPE_SECRET_KEY"));
   assert(!script.includes("SUPABASE_SERVICE_ROLE_KEY"));

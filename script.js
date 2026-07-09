@@ -679,7 +679,7 @@ function sortReports(reports) {
 
 function getUsage() {
   if (isDeveloperMode() || isProUser()) return 0;
-  if (authState.signedIn && serverUsageState) return Number(serverUsageState.count || 0);
+  if (authState.signedIn) return serverUsageState ? Number(serverUsageState.count || 0) : 0;
 
   try {
     const data = JSON.parse(localStorage.getItem(USAGE_KEY));
@@ -725,6 +725,14 @@ function updateUsageUI() {
   els.usageBar.closest(".usage-card")?.classList.toggle("is-dev", devMode);
   els.usageBar.closest(".usage-card")?.classList.toggle("is-pro", proMode);
   updateProUpgradeUI();
+
+  if (!authState.signedIn && !devMode) {
+    els.usageText.textContent = "Sign in to track monthly usage.";
+    els.usageBar.hidden = true;
+    els.usageBar.setAttribute("aria-valuenow", "0");
+    els.usageFill.style.width = "0%";
+    return;
+  }
 
   if (devMode || proMode) {
     els.usageText.textContent = "Unlimited reports";
