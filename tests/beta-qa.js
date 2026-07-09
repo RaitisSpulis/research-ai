@@ -35,7 +35,7 @@ async function testClerkTokenBasics() {
 }
 
 function testStripeWebhookSignature() {
-  const { constructStripeEvent, verifyStripeSignature } = require("../api/stripe-webhook")._test;
+  const { constructStripeEvent, getSubscriptionTiming, verifyStripeSignature } = require("../api/stripe-webhook")._test;
   const secret = "whsec_test_secret";
   const payload = JSON.stringify({
     id: "evt_test",
@@ -53,6 +53,13 @@ function testStripeWebhookSignature() {
   assert.strictEqual(constructStripeEvent(payload, header, secret).type, "checkout.session.completed");
   assert.throws(() => verifyStripeSignature(payload, `t=${timestamp},v1=bad`, secret), /invalid/i);
   assert.throws(() => verifyStripeSignature(payload, "", secret), /missing/i);
+
+  const timing = getSubscriptionTiming({
+    cancel_at_period_end: true,
+    current_period_end: 1786233600
+  });
+  assert.strictEqual(timing.cancelAtPeriodEnd, true);
+  assert.strictEqual(timing.currentPeriodEnd, "2026-08-09T00:00:00.000Z");
 }
 
 async function testSupabaseUsageAndOwnershipQueries() {

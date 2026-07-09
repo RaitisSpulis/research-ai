@@ -21,7 +21,8 @@ function isProMetadata(metadata) {
   return Boolean(
     metadata?.pro === true ||
     metadata?.plan === "pro" ||
-    metadata?.subscriptionStatus === "active"
+    metadata?.subscriptionStatus === "active" ||
+    metadata?.subscriptionStatus === "trialing"
   );
 }
 
@@ -114,6 +115,8 @@ async function updateUserPlan(userId, plan, subscription = {}) {
   if (subscription.customerId !== undefined) payload.stripe_customer_id = subscription.customerId || "";
   if (subscription.subscriptionId !== undefined) payload.stripe_subscription_id = subscription.subscriptionId || "";
   if (subscription.status !== undefined) payload.subscription_status = subscription.status || "";
+  if (subscription.cancelAtPeriodEnd !== undefined) payload.cancel_at_period_end = Boolean(subscription.cancelAtPeriodEnd);
+  if (subscription.currentPeriodEnd !== undefined) payload.current_period_end = subscription.currentPeriodEnd || null;
 
   const [user] = await supabaseRequest("/rest/v1/users?on_conflict=clerk_user_id", {
     method: "POST",

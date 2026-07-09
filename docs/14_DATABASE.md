@@ -28,6 +28,8 @@ create table if not exists public.users (
   subscription_status text,
   stripe_customer_id text,
   stripe_subscription_id text,
+  cancel_at_period_end boolean not null default false,
+  current_period_end timestamptz,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
@@ -83,7 +85,9 @@ If the Sprint 14 schema already exists, run this upgrade migration:
 alter table public.users
   add column if not exists subscription_status text,
   add column if not exists stripe_customer_id text,
-  add column if not exists stripe_subscription_id text;
+  add column if not exists stripe_subscription_id text,
+  add column if not exists cancel_at_period_end boolean not null default false,
+  add column if not exists current_period_end timestamptz;
 ```
 
 ## Row Level Security
@@ -148,8 +152,10 @@ RLS is enabled now so the database has a safe default before any future client-s
 9. `localStorage` remains only as a browser cache and offline fallback.
 
 Subscription webhooks keep `users.plan`, `users.subscription_status`,
-`users.stripe_customer_id`, and `users.stripe_subscription_id` synchronized with
-Stripe and Clerk metadata.
+`users.stripe_customer_id`, `users.stripe_subscription_id`,
+`users.cancel_at_period_end`, and `users.current_period_end` synchronized with
+Stripe and Clerk metadata. Users keep Pro access while `cancel_at_period_end`
+is true and are downgraded only after Stripe sends the final canceled event.
 
 If live Gemini fails and the browser creates a local fallback report, `/api/reports` enforces and increments usage before saving the fallback report.
 

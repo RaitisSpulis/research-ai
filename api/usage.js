@@ -40,7 +40,9 @@ module.exports = async function handler(request, response) {
       billing: {
         plan: user?.plan || (isProClerkUser(clerkUser) ? "pro" : "free"),
         subscriptionStatus: user?.subscription_status || null,
-        stripeCustomerConnected: Boolean(user?.stripe_customer_id)
+        stripeCustomerConnected: Boolean(user?.stripe_customer_id),
+        cancelAtPeriodEnd: Boolean(user?.cancel_at_period_end),
+        currentPeriodEnd: user?.current_period_end || null
       }
     });
   } catch (error) {

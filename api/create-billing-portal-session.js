@@ -24,6 +24,15 @@ function getStripeCustomerIdFromClerk(user) {
   );
 }
 
+function getSubscriptionMetadataFromClerk(user) {
+  const publicMetadata = user?.public_metadata || {};
+  const privateMetadata = user?.private_metadata || {};
+  return {
+    cancelAtPeriodEnd: Boolean(publicMetadata.cancelAtPeriodEnd || privateMetadata.cancelAtPeriodEnd),
+    currentPeriodEnd: publicMetadata.currentPeriodEnd || privateMetadata.currentPeriodEnd || null
+  };
+}
+
 function isProSupabaseUser(user) {
   return user?.plan === "pro" || user?.subscription_status === "active" || user?.subscription_status === "trialing";
 }
@@ -49,15 +58,20 @@ async function resolveBillingCustomer(clerkUser) {
   let customerId = supabaseUser?.stripe_customer_id || "";
   let pro = isProClerkUser(clerkUser) || isProSupabaseUser(supabaseUser);
   let subscriptionStatus = supabaseUser?.subscription_status || "";
+  let cancelAtPeriodEnd = Boolean(supabaseUser?.cancel_at_period_end);
+  let currentPeriodEnd = supabaseUser?.current_period_end || null;
 
   if (!customerId) {
     const clerkApiUser = await getClerkUser(userId);
+    const clerkSubscriptionMetadata = getSubscriptionMetadataFromClerk(clerkApiUser);
     customerId = getStripeCustomerIdFromClerk(clerkApiUser);
     pro = pro || isProClerkUser({
       publicMetadata: clerkApiUser?.public_metadata,
       privateMetadata: clerkApiUser?.private_metadata
     });
     subscriptionStatus = subscriptionStatus || clerkApiUser?.public_metadata?.subscriptionStatus || clerkApiUser?.private_metadata?.subscriptionStatus || "";
+    cancelAtPeriodEnd = cancelAtPeriodEnd || clerkSubscriptionMetadata.cancelAtPeriodEnd;
+    currentPeriodEnd = currentPeriodEnd || clerkSubscriptionMetadata.currentPeriodEnd;
   }
 
   const canManageBilling = pro || hasManageableSubscriptionStatus(subscriptionStatus);
@@ -76,7 +90,9 @@ async function resolveBillingCustomer(clerkUser) {
 
   return {
     customerId,
-    subscriptionStatus
+    subscriptionStatus,
+    cancelAtPeriodEnd,
+    currentPeriodEnd
   };
 }
 
@@ -148,7 +164,9 @@ module.exports = async function handler(request, response) {
     const url = await createBillingPortalSession(billingCustomer.customerId);
     sendOk(response, {
       url,
-      subscriptionStatus: billingCustomer.subscriptionStatus || null
+      subscriptionStatus: billingCustomer.subscriptionStatus || null,
+      cancelAtPeriodEnd: billingCustomer.cancelAtPeriodEnd,
+      currentPeriodEnd: billingCustomer.currentPeriodEnd
     });
   } catch (error) {
     if (error.code === "pro_required") {
@@ -185,6 +203,7 @@ module.exports = async function handler(request, response) {
 
 module.exports._test = {
   createBillingPortalSession,
+  getSubscriptionMetadataFromClerk,
   getStripeCustomerIdFromClerk,
   resolveBillingCustomer
 };

@@ -120,6 +120,19 @@ function getSubscriptionPlan(status) {
   return "free";
 }
 
+function unixTimestampToIso(value) {
+  const seconds = Number(value || 0);
+  if (!Number.isFinite(seconds) || seconds <= 0) return null;
+  return new Date(seconds * 1000).toISOString();
+}
+
+function getSubscriptionTiming(subscription = {}) {
+  return {
+    cancelAtPeriodEnd: Boolean(subscription.cancel_at_period_end),
+    currentPeriodEnd: unixTimestampToIso(subscription.current_period_end)
+  };
+}
+
 async function syncSubscriptionToClerkAndSupabase(userId, plan, subscription = {}) {
   if (!userId) {
     console.log("[Subscription sync] no Clerk user id found");
@@ -136,6 +149,8 @@ async function syncSubscriptionToClerkAndSupabase(userId, plan, subscription = {
 
   await updateUserPlan(userId, plan, subscription);
   console.log("[Subscription sync] Supabase plan updated", userId, plan);
+  console.log("[Subscription sync] cancel_at_period_end", Boolean(subscription.cancelAtPeriodEnd));
+  console.log("[Subscription sync] current_period_end", subscription.currentPeriodEnd || null);
 }
 
 async function handleCheckoutCompleted(session) {
@@ -151,7 +166,9 @@ async function handleCheckoutCompleted(session) {
     customerId: session.customer || "",
     subscriptionId: session.subscription || "",
     checkoutSessionId: session.id || "",
-    status: "active"
+    status: "active",
+    cancelAtPeriodEnd: false,
+    currentPeriodEnd: null
   });
 }
 
@@ -163,10 +180,12 @@ async function handleSubscriptionUpdated(subscription) {
   }
 
   const plan = getSubscriptionPlan(subscription?.status || "");
+  const timing = getSubscriptionTiming(subscription);
   await syncSubscriptionToClerkAndSupabase(userId, plan, {
     customerId: subscription?.customer || "",
     subscriptionId: subscription?.id || "",
-    status: subscription?.status || plan
+    status: subscription?.status || plan,
+    ...timing
   });
 }
 
@@ -178,10 +197,12 @@ async function handleSubscriptionInactive(subscription, status) {
   }
 
   const plan = status === "past_due" || status === "unpaid" ? "past_due" : "free";
+  const timing = getSubscriptionTiming(subscription);
   await syncSubscriptionToClerkAndSupabase(userId, plan, {
     customerId: subscription.customer || "",
     subscriptionId: subscription.id || "",
-    status
+    status,
+    ...timing
   });
 }
 
@@ -196,7 +217,9 @@ async function handleInvoicePaymentFailed(invoice) {
   await syncSubscriptionToClerkAndSupabase(userId, "past_due", {
     customerId: invoice?.customer || "",
     subscriptionId: typeof subscription === "string" ? subscription : subscription?.id || "",
-    status: "past_due"
+    status: "past_due",
+    cancelAtPeriodEnd: false,
+    currentPeriodEnd: null
   });
 }
 
@@ -281,7 +304,9 @@ module.exports._test = {
   getClerkUserIdFromInvoice,
   getClerkUserIdFromSubscription,
   getSubscriptionPlan,
+  getSubscriptionTiming,
   handleSubscriptionUpdated,
+  unixTimestampToIso,
   verifyStripeSignature,
   getClerkUserIdFromSession
 };

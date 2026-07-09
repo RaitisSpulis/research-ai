@@ -14,8 +14,16 @@ function isProMetadata(metadata) {
   return Boolean(
     metadata?.pro === true ||
     metadata?.plan === "pro" ||
-    metadata?.subscriptionStatus === "active"
+    metadata?.subscriptionStatus === "active" ||
+    metadata?.subscriptionStatus === "trialing"
   );
+}
+
+function getSubscriptionMetadata(subscription = {}) {
+  return {
+    cancelAtPeriodEnd: Boolean(subscription.cancelAtPeriodEnd),
+    currentPeriodEnd: subscription.currentPeriodEnd || null
+  };
 }
 
 async function clerkRequest(path, options = {}) {
@@ -66,6 +74,7 @@ async function markUserPro(userId, subscription = {}) {
   }
 
   const activatedAt = new Date().toISOString();
+  const subscriptionMetadata = getSubscriptionMetadata(subscription);
   console.log("[Clerk] marking user Pro", userId);
   return clerkRequest(`/users/${encodeURIComponent(userId)}/metadata`, {
     method: "PATCH",
@@ -74,12 +83,14 @@ async function markUserPro(userId, subscription = {}) {
         pro: true,
         plan: "pro",
         subscriptionStatus: subscription.status || "active",
+        ...subscriptionMetadata,
         proActivatedAt: activatedAt
       },
       private_metadata: {
         pro: true,
         plan: "pro",
         subscriptionStatus: subscription.status || "active",
+        ...subscriptionMetadata,
         proActivatedAt: activatedAt,
         stripeCustomerId: subscription.customerId || "",
         stripeSubscriptionId: subscription.subscriptionId || "",
@@ -99,6 +110,7 @@ async function markUserFree(userId, subscription = {}) {
   const updatedAt = new Date().toISOString();
   const status = subscription.status || "inactive";
   const plan = status === "past_due" || status === "unpaid" ? "past_due" : "free";
+  const subscriptionMetadata = getSubscriptionMetadata(subscription);
   console.log("[Clerk] marking user Free", userId);
   return clerkRequest(`/users/${encodeURIComponent(userId)}/metadata`, {
     method: "PATCH",
@@ -107,12 +119,14 @@ async function markUserFree(userId, subscription = {}) {
         pro: false,
         plan,
         subscriptionStatus: status,
+        ...subscriptionMetadata,
         proDeactivatedAt: updatedAt
       },
       private_metadata: {
         pro: false,
         plan,
         subscriptionStatus: status,
+        ...subscriptionMetadata,
         proDeactivatedAt: updatedAt,
         stripeCustomerId: subscription.customerId || "",
         stripeSubscriptionId: subscription.subscriptionId || ""

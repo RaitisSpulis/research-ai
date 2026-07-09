@@ -190,7 +190,8 @@ function userHasProMetadata(user) {
   return Boolean(
     metadata.pro === true ||
     metadata.plan === "pro" ||
-    metadata.subscriptionStatus === "active"
+    metadata.subscriptionStatus === "active" ||
+    metadata.subscriptionStatus === "trialing"
   );
 }
 
@@ -220,7 +221,9 @@ function updateAuthStateFromClerk() {
     billingState = {
       plan: "free",
       subscriptionStatus: null,
-      stripeCustomerConnected: false
+      stripeCustomerConnected: false,
+      cancelAtPeriodEnd: false,
+      currentPeriodEnd: null
     };
   } else if (authState.isPro && billingState.plan !== "pro") {
     billingState = {
@@ -423,7 +426,9 @@ let serverUsageState = null;
 let billingState = {
   plan: "free",
   subscriptionStatus: null,
-  stripeCustomerConnected: false
+  stripeCustomerConnected: false,
+  cancelAtPeriodEnd: false,
+  currentPeriodEnd: null
 };
 let workspaceSyncPromise = null;
 const authState = {
@@ -555,7 +560,9 @@ function applyBillingState(billing) {
   billingState = {
     plan: billing.plan || (authState.isPro ? "pro" : "free"),
     subscriptionStatus: billing.subscriptionStatus || billing.subscription_status || null,
-    stripeCustomerConnected: Boolean(billing.stripeCustomerConnected || billing.stripe_customer_id)
+    stripeCustomerConnected: Boolean(billing.stripeCustomerConnected || billing.stripe_customer_id),
+    cancelAtPeriodEnd: Boolean(billing.cancelAtPeriodEnd || billing.cancel_at_period_end),
+    currentPeriodEnd: billing.currentPeriodEnd || billing.current_period_end || null
   };
   if (billingState.plan === "pro" || billingState.subscriptionStatus === "active" || billingState.subscriptionStatus === "trialing") {
     authState.isPro = true;
@@ -3260,7 +3267,7 @@ function getBillingReturnStatus() {
   }
 }
 
-async function startBillingPortal() {
+async function startBillingPortal(event) {
   if (!authState.signedIn) {
     showToast("Sign in to manage billing.", "info");
     openSignIn();
@@ -3272,7 +3279,7 @@ async function startBillingPortal() {
     return;
   }
 
-  const button = document.getElementById("manageBillingBtn");
+  const button = event?.currentTarget || document.getElementById("manageBillingBtn") || document.getElementById("resumeBillingBtn");
   if (button) {
     button.disabled = true;
     button.textContent = "Opening billing...";
@@ -3294,7 +3301,7 @@ async function startBillingPortal() {
     showToast(error.message || "Billing Portal is temporarily unavailable.", "warn");
     if (button) {
       button.disabled = false;
-      button.textContent = "Manage Subscription";
+      button.textContent = button.id === "resumeBillingBtn" ? "Resume Subscription" : "Manage Subscription";
     }
   }
 }
@@ -3597,10 +3604,22 @@ function cancelLoading() {
 /* -- Panels -- */
 
 function formatSubscriptionStatus(status) {
+  if (billingState.cancelAtPeriodEnd) return "Cancelling at period end";
   if (!status) return isProUser() ? "Active" : "Free";
   return String(status)
     .replace(/_/g, " ")
     .replace(/\b\w/g, character => character.toUpperCase());
+}
+
+function formatBillingDate(value) {
+  if (!value) return "Available inside Stripe Billing Portal";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "Available inside Stripe Billing Portal";
+  return date.toLocaleDateString(undefined, {
+    year: "numeric",
+    month: "long",
+    day: "numeric"
+  });
 }
 
 function renderBillingSettingsSection() {
@@ -3608,9 +3627,11 @@ function renderBillingSettingsSection() {
   const status = formatSubscriptionStatus(billingState.subscriptionStatus);
 
   if (hasManageableBilling()) {
-    const renewalText = billingState.subscriptionStatus
-      ? "Renewal and invoice dates are available inside Stripe Billing Portal."
-      : "Renewal details are available inside Stripe Billing Portal.";
+    const renewalLabel = billingState.cancelAtPeriodEnd ? "Subscription ends" : "Next Renewal";
+    const renewalText = formatBillingDate(billingState.currentPeriodEnd);
+    const resumeButton = billingState.cancelAtPeriodEnd
+      ? `<button class="ghost-btn" type="button" id="resumeBillingBtn">Resume Subscription</button>`
+      : "";
     return `
       <div class="settings-group billing-settings">
         <h3>Billing</h3>
@@ -3623,10 +3644,11 @@ function renderBillingSettingsSection() {
           <strong>${escapeHtml(status)}</strong>
         </div>
         <div class="billing-row">
-          <span>Next Renewal</span>
+          <span>${escapeHtml(renewalLabel)}</span>
           <strong>${escapeHtml(renewalText)}</strong>
         </div>
         <button class="accent-btn" type="button" id="manageBillingBtn">Manage Subscription</button>
+        ${resumeButton}
         <p>Manage payment method, invoices, billing history and cancellation through Stripe.</p>
       </div>`;
   }
@@ -3693,6 +3715,7 @@ function openPanel(name) {
         if (billingSection) {
           billingSection.outerHTML = renderBillingSettingsSection();
           on(document.getElementById("manageBillingBtn"), "click", startBillingPortal);
+          on(document.getElementById("resumeBillingBtn"), "click", startBillingPortal);
           on(document.getElementById("settingsUpgradeBtn"), "click", startProCheckout);
         }
       }
@@ -3713,6 +3736,7 @@ function openPanel(name) {
       });
     }
     on(document.getElementById("manageBillingBtn"), "click", startBillingPortal);
+    on(document.getElementById("resumeBillingBtn"), "click", startBillingPortal);
     on(document.getElementById("settingsUpgradeBtn"), "click", startProCheckout);
   }
 

@@ -52,6 +52,12 @@ The endpoint verifies the Clerk session, looks up the Stripe customer id from Su
 10. Stripe redirects back to `SITE_URL?billing=returned`.
 11. The frontend reloads the Clerk user and refreshes Supabase usage/billing state.
 
+If a user cancels at period end, Stripe sends `cancel_at_period_end=true` and
+`current_period_end` on subscription update events. ResearchAI stores those
+fields in Supabase and Clerk metadata, keeps Pro access active, and shows the
+subscription end date in Settings. Pro access is removed only after Stripe sends
+the final canceled/deleted subscription event.
+
 ## Subscription Sync
 
 Plan changes, cancellations, and failed payments are still synchronized by the Stripe webhook:
