@@ -10,6 +10,8 @@ Set these values in Vercel Project Settings before testing checkout:
 - `STRIPE_PRO_PRICE_ID`: Recurring Price ID for the ResearchAI Pro plan.
 - `SITE_URL`: Public site URL, for example `https://researchai.app`.
 - `CLERK_PUBLISHABLE_KEY`: Clerk publishable key for frontend authentication.
+- `CLERK_SECRET_KEY`: Clerk backend secret key for webhook activation.
+- `STRIPE_WEBHOOK_SECRET`: Stripe webhook signing secret.
 
 Do not add secret keys to frontend code, Git, or public documentation. Clerk publishable keys are safe to expose; Clerk secret keys are not.
 
@@ -27,7 +29,7 @@ Current frontend auth behavior:
 - signed-out users are asked to sign in before upgrading
 - signed-in users can start Stripe Checkout
 - Clerk user id and email are sent to `/api/create-checkout-session`
-- Pro is not activated automatically yet
+- Pro is activated after Stripe sends a verified `checkout.session.completed` webhook
 
 ## Creating the Stripe Product and Price
 
@@ -72,22 +74,47 @@ The endpoint returns:
 
 The browser redirects the user to the returned Stripe Checkout URL.
 
+## Stripe Webhook Setup
+
+Create a Stripe webhook endpoint pointing to:
+
+`https://your-domain.com/api/stripe-webhook`
+
+Subscribe to:
+
+- `checkout.session.completed`
+
+After creating the endpoint, copy the signing secret into:
+
+`STRIPE_WEBHOOK_SECRET`
+
+The webhook:
+
+1. Verifies the Stripe signature.
+2. Reads the Clerk user id from `client_reference_id` or session metadata.
+3. Marks the Clerk user as Pro in public and private metadata.
+
+The checkout session stores:
+
+- `client_reference_id`: Clerk user id
+- `metadata.clerkUserId`: Clerk user id
+- `metadata.email`: Clerk email, when available
+
 ## Current Limitation
 
-This sprint includes frontend Clerk authentication, but it does not include server-side Clerk token verification, subscription storage, or Stripe webhooks.
+This sprint includes frontend Clerk authentication and webhook-based Pro activation. It does not yet include server-side Clerk token verification for every API request or a separate subscription database.
 
 After a successful checkout, ResearchAI shows:
 
 `Payment received. Pro account activation will be completed after account setup.`
 
-This is intentional for the first test launch. Pro status is not activated automatically yet.
+The user becomes Pro after Stripe delivers the verified webhook and Clerk metadata refreshes.
 
 ## Next Step
 
 The next production milestone should add:
 
-- server-side Clerk token verification
-- Stripe webhook handling
+- server-side Clerk token verification for protected API routes
 - customer and subscription persistence
 - subscription status checks in the frontend
 - Pro limit enforcement based on server-side subscription state

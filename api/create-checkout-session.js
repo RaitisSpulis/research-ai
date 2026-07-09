@@ -63,6 +63,7 @@ async function createStripeCheckoutSession(user) {
     allow_promotion_codes: "true",
     client_reference_id: user.userId,
     "metadata[product]": "ResearchAI Pro",
+    "metadata[clerkUserId]": user.userId,
     "metadata[clerk_user_id]": user.userId
   });
 

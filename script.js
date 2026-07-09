@@ -142,14 +142,29 @@ function getPrimaryEmail(user) {
   );
 }
 
+function userHasProMetadata(user) {
+  const metadata = user?.publicMetadata || user?.public_metadata || {};
+  return Boolean(
+    metadata.pro === true ||
+    metadata.plan === "pro" ||
+    metadata.subscriptionStatus === "active"
+  );
+}
+
+function isProUser() {
+  return authState.signedIn && authState.isPro;
+}
+
 function updateAuthStateFromClerk() {
   const clerk = authState.clerk;
   const user = clerk?.user || null;
   authState.ready = Boolean(clerk);
   authState.signedIn = Boolean(user);
+  authState.isPro = userHasProMetadata(user);
   authState.userId = user?.id || "";
   authState.email = getPrimaryEmail(user);
   updateAuthUI();
+  updateUsageUI();
 }
 
 function updateAuthUI() {
@@ -166,7 +181,7 @@ function updateAuthUI() {
   }
 
   if (authState.signedIn) {
-    if (els.authStatus) els.authStatus.textContent = "Signed in";
+    if (els.authStatus) els.authStatus.textContent = authState.isPro ? "Pro account" : "Free account";
     if (els.authMeta) els.authMeta.textContent = authState.email || authState.userId || "Authenticated account";
     if (els.signInBtn) els.signInBtn.hidden = true;
     if (els.signUpBtn) els.signUpBtn.hidden = true;
@@ -188,6 +203,14 @@ function updateAuthUI() {
     els.signUpBtn.disabled = !authState.ready;
   }
   if (els.signOutBtn) els.signOutBtn.hidden = true;
+}
+
+function updateProUpgradeUI() {
+  if (!els.proCheckoutBtn) return;
+  els.proCheckoutBtn.hidden = isProUser();
+  if (!isProUser()) {
+    els.proCheckoutBtn.textContent = "Upgrade to Pro";
+  }
 }
 
 function waitForClerkConstructor(attempt = 0) {
@@ -272,6 +295,7 @@ const authState = {
   ready: false,
   configured: false,
   signedIn: false,
+  isPro: false,
   userId: "",
   email: "",
   clerk: null
@@ -373,7 +397,7 @@ function getReports() {
 
 function saveReports(reports) {
   const sorted = sortReports(reports.map(normalizeReport));
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(isDeveloperMode() ? sorted : sorted.slice(0, 50)));
+  localStorage.setItem(STORAGE_KEY, JSON.stringify((isDeveloperMode() || isProUser()) ? sorted : sorted.slice(0, 50)));
 }
 
 function normalizeReport(report) {
@@ -398,7 +422,7 @@ function sortReports(reports) {
 }
 
 function getUsage() {
-  if (isDeveloperMode()) return 0;
+  if (isDeveloperMode() || isProUser()) return 0;
 
   try {
     const data = JSON.parse(localStorage.getItem(USAGE_KEY));
@@ -412,7 +436,7 @@ function getUsage() {
 }
 
 function incrementUsage() {
-  if (isDeveloperMode()) {
+  if (isDeveloperMode() || isProUser()) {
     updateUsageUI();
     return 0;
   }
@@ -428,15 +452,19 @@ function incrementUsage() {
 function updateUsageUI() {
   if (!els.usageText || !els.usageBar || !els.usageFill) return;
   const devMode = isDeveloperMode();
+  const proMode = isProUser();
 
-  if (els.usageTitle) els.usageTitle.textContent = devMode ? "Developer Mode" : "Free Workspace";
+  if (els.usageTitle) els.usageTitle.textContent = devMode ? "Developer Mode" : proMode ? "Pro Workspace" : "Free Workspace";
   if (els.devModeBadge) {
     els.devModeBadge.hidden = !devMode;
     els.devModeBadge.textContent = "DEV Unlimited";
   }
-  els.usageBar.hidden = devMode;
+  els.usageBar.hidden = devMode || proMode;
   els.usageBar.closest(".usage-card")?.classList.toggle("is-dev", devMode);
-  if (devMode) {
+  els.usageBar.closest(".usage-card")?.classList.toggle("is-pro", proMode);
+  updateProUpgradeUI();
+
+  if (devMode || proMode) {
     els.usageText.textContent = "Unlimited reports";
     els.usageBar.setAttribute("aria-valuenow", "0");
     els.usageFill.style.width = "0%";
@@ -3116,7 +3144,7 @@ function startResearch() {
     return;
   }
 
-  if (!isDeveloperMode()) {
+  if (!isDeveloperMode() && !isProUser()) {
     if (getUsage() >= FREE_LIMIT) {
       showToast("Free report limit reached. Upgrade to Pro for a higher monthly report limit.", "warn");
       return;

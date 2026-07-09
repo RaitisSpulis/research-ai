@@ -437,6 +437,17 @@ a {
   display: none;
 }
 
+.usage-card.is-pro {
+  background:
+    linear-gradient(145deg, rgba(139,92,246,.17), rgba(34,211,238,.075)),
+    rgba(255,255,255,.055);
+  border-color: rgba(139,92,246,.3);
+}
+
+.usage-card.is-pro .usage-bar {
+  display: none;
+}
+
 .auth-card {
   margin-top: 14px;
   padding: 16px;
