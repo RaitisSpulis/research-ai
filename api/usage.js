@@ -1,6 +1,7 @@
 const { verifyClerkRequest } = require("./_clerk-token");
 const { sendError, sendOk } = require("./_responses");
 const { getUsage, isProClerkUser, upsertUser } = require("./_supabase");
+const { rejectDisallowedOrigin } = require("./_security");
 
 function sendSupabaseError(response, error) {
   if (error.code === "missing_supabase_configuration") {
@@ -14,6 +15,8 @@ function sendSupabaseError(response, error) {
 }
 
 module.exports = async function handler(request, response) {
+  if (rejectDisallowedOrigin(request, response, sendError)) return;
+
   if (request.method !== "GET") {
     response.setHeader("Allow", "GET");
     sendError(response, 400, "method_not_allowed", "Use GET to read usage.");

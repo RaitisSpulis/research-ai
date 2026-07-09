@@ -86,6 +86,55 @@ alter table public.users
   add column if not exists stripe_subscription_id text;
 ```
 
+## Row Level Security
+
+Run this migration before public beta. It enables RLS on all application tables and adds user-scoped policies for future direct Supabase access.
+
+```sql
+alter table public.users enable row level security;
+alter table public.reports enable row level security;
+alter table public.usage enable row level security;
+alter table public.collections enable row level security;
+alter table public.saved_reports enable row level security;
+
+drop policy if exists "Users can access own user row" on public.users;
+create policy "Users can access own user row"
+  on public.users
+  for all
+  using (clerk_user_id = auth.jwt() ->> 'sub')
+  with check (clerk_user_id = auth.jwt() ->> 'sub');
+
+drop policy if exists "Users can access own reports" on public.reports;
+create policy "Users can access own reports"
+  on public.reports
+  for all
+  using (user_id = auth.jwt() ->> 'sub')
+  with check (user_id = auth.jwt() ->> 'sub');
+
+drop policy if exists "Users can access own usage" on public.usage;
+create policy "Users can access own usage"
+  on public.usage
+  for all
+  using (user_id = auth.jwt() ->> 'sub')
+  with check (user_id = auth.jwt() ->> 'sub');
+
+drop policy if exists "Users can access own collections" on public.collections;
+create policy "Users can access own collections"
+  on public.collections
+  for all
+  using (user_id = auth.jwt() ->> 'sub')
+  with check (user_id = auth.jwt() ->> 'sub');
+
+drop policy if exists "Users can access own saved reports" on public.saved_reports;
+create policy "Users can access own saved reports"
+  on public.saved_reports
+  for all
+  using (user_id = auth.jwt() ->> 'sub')
+  with check (user_id = auth.jwt() ->> 'sub');
+```
+
+RLS is enabled now so the database has a safe default before any future client-side Supabase access exists. The current app still does not use the Supabase anon key or call Supabase from the browser. All database access goes through Vercel API routes using `SUPABASE_SERVICE_ROLE_KEY`, and Supabase service-role requests bypass RLS by design. This keeps the current server flow working while preventing accidental future anon/client access from reading or writing another user's rows.
+
 ## Current Flow
 
 1. The frontend gets a Clerk session token.

@@ -49,6 +49,10 @@ async function verifyClerkToken(token) {
     return null;
   }
 
+  if (header.alg !== "RS256") {
+    return null;
+  }
+
   const issuer = String(payload.iss).replace(/\/+$/, "");
   const expectedIssuer = getExpectedClerkIssuer();
   if (!expectedIssuer || issuer !== expectedIssuer) {

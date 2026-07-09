@@ -1,5 +1,6 @@
 const { sendError, sendOk } = require("./_responses");
 const { getAuthToken, getExpectedClerkIssuer, verifyClerkToken } = require("./_clerk-token");
+const { rejectDisallowedOrigin } = require("./_security");
 
 const STRIPE_CHECKOUT_URL = "https://api.stripe.com/v1/checkout/sessions";
 
@@ -36,15 +37,30 @@ function validateCheckoutRequest(body) {
   return "";
 }
 
-async function validateAuthMatchesUser(request, userId) {
+async function getValidatedCheckoutUser(request, userId) {
   const token = getAuthToken(request);
-  if (!token) return "Authentication token is required.";
+  if (!token) {
+    const error = new Error("Authentication token is required.");
+    error.code = "unauthorized";
+    throw error;
+  }
 
   const payload = await verifyClerkToken(token);
-  if (!payload?.sub) return "Authentication token is invalid.";
-  if (payload.sub !== userId) return "Authenticated user does not match checkout user.";
+  if (!payload?.sub) {
+    const error = new Error("Authentication token is invalid.");
+    error.code = "unauthorized";
+    throw error;
+  }
+  if (payload.sub !== userId) {
+    const error = new Error("Authenticated user does not match checkout user.");
+    error.code = "unauthorized";
+    throw error;
+  }
 
-  return "";
+  return {
+    userId: payload.sub,
+    email: payload.email || payload.email_address || ""
+  };
 }
 
 async function createStripeCheckoutSession(user) {
@@ -115,6 +131,8 @@ async function createStripeCheckoutSession(user) {
 }
 
 module.exports = async function handler(request, response) {
+  if (rejectDisallowedOrigin(request, response, sendError)) return;
+
   if (request.method !== "POST") {
     response.setHeader("Allow", "POST");
     sendError(response, 400, "method_not_allowed", "Use POST to create a checkout session.");
@@ -128,16 +146,18 @@ module.exports = async function handler(request, response) {
     return;
   }
 
-  const authError = await validateAuthMatchesUser(request, body.userId.trim());
-  if (authError) {
-    sendError(response, 401, "unauthorized", authError);
+  let checkoutUser;
+  try {
+    checkoutUser = await getValidatedCheckoutUser(request, body.userId.trim());
+  } catch (error) {
+    sendError(response, 401, "unauthorized", error.message || "Authentication is required.");
     return;
   }
 
   try {
     const url = await createStripeCheckoutSession({
-      userId: body.userId.trim(),
-      email: body.email ? body.email.trim() : ""
+      userId: checkoutUser.userId,
+      email: checkoutUser.email
     });
     sendOk(response, { url });
   } catch (error) {
@@ -164,5 +184,6 @@ module.exports = async function handler(request, response) {
 
 module.exports._test = {
   getExpectedClerkIssuer,
+  getValidatedCheckoutUser,
   verifyClerkToken
 };

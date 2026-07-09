@@ -2745,7 +2745,7 @@ function buildDynamicSections(data) {
 
 function renderDynamicSection(section) {
   if (!section || !section.title) return "";
-  const id = escapeHtml(section.id || slugifyId(section.title));
+  const id = slugifyId(section.id || section.title || "section");
   const purpose = section.purpose ? `<span>${escapeHtml(section.purpose)}</span>` : "";
   let body = "";
   const safeParagraph = value => escapeHtml(value)
@@ -3051,9 +3051,10 @@ function getTreeSections(data) {
 function buildTreeNav(data = currentReport) {
   const sections = getTreeSections(data);
 
-  els.treeNav.innerHTML = sections.map(([id, label], i) =>
-    `<a class="tree-link${i === 0 ? " active" : ""}" href="#${id}"><span>${i + 1}</span><b>${label}</b><em aria-hidden="true"></em></a>`
-  ).join("");
+  els.treeNav.innerHTML = sections.map(([id, label], i) => {
+    const safeId = slugifyId(id || label || `section-${i + 1}`);
+    return `<a class="tree-link${i === 0 ? " active" : ""}" href="#${safeId}"><span>${i + 1}</span><b>${escapeHtml(label)}</b><em aria-hidden="true"></em></a>`;
+  }).join("");
 }
 
 function applyBarWidths(container) {
@@ -3585,7 +3586,7 @@ function renderHistoryPanel(favoritesOnly) {
   }
 
   els.panelBody.innerHTML = `<div class="history-list">${reports.map(r => `
-    <div class="history-item" data-id="${r.id}">
+    <div class="history-item" data-id="${escapeHtml(r.id)}">
       <span class="history-icon">${escapeHtml(initials(r.title))}</span>
       <div>
         <strong>${escapeHtml(r.title)}</strong>

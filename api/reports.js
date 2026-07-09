@@ -1,6 +1,7 @@
 const { verifyClerkRequest } = require("./_clerk-token");
 const { isUserPro } = require("./_auth");
 const { sendError, sendOk } = require("./_responses");
+const { rejectDisallowedOrigin } = require("./_security");
 const {
   assertUsageAvailable,
   deleteReport,
@@ -71,6 +72,8 @@ async function resolveProStatus(clerkUser) {
 }
 
 module.exports = async function handler(request, response) {
+  if (rejectDisallowedOrigin(request, response, sendError)) return;
+
   const clerkUser = await authenticate(request, response);
   if (!clerkUser) return;
 

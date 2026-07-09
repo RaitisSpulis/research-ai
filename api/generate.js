@@ -3,6 +3,7 @@ const { sendError, sendOk } = require("./_responses");
 const { verifyClerkRequest } = require("./_clerk-token");
 const { assertUsageAvailable, getUserByClerkId, incrementUsage, isProClerkUser, upsertUser } = require("./_supabase");
 const { isUserPro } = require("./_auth");
+const { rejectDisallowedOrigin } = require("./_security");
 
 const MAX_PROMPT_LENGTH = 500;
 
@@ -115,6 +116,8 @@ async function resolveProStatus(clerkUser) {
 }
 
 module.exports = async function handler(request, response) {
+  if (rejectDisallowedOrigin(request, response, sendError)) return;
+
   if (request.method !== "POST") {
     response.setHeader("Allow", "POST");
     sendError(response, 400, "method_not_allowed", "Use POST to generate a report.");
