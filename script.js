@@ -31,6 +31,7 @@ if (typeof module !== "undefined" && module.exports) {
 
 const researchAIConfig = {
   generationMode: "gemini",
+  clerkPublishableKey: "",
   api: {
     generateEndpoint: "/api/generate",
     checkoutEndpoint: "/api/create-checkout-session",
@@ -90,6 +91,11 @@ const els = {
   usageBar: document.getElementById("usageBar"),
   usageFill: document.getElementById("usageFill"),
   devModeBadge: document.getElementById("devModeBadge"),
+  authStatus: document.getElementById("authStatus"),
+  authMeta: document.getElementById("authMeta"),
+  signInBtn: document.getElementById("signInBtn"),
+  signUpBtn: document.getElementById("signUpBtn"),
+  signOutBtn: document.getElementById("signOutBtn"),
   topicCloud: document.getElementById("topicCloud"),
   refreshTopics: document.getElementById("refreshTopics"),
   toast: document.getElementById("toast"),
@@ -119,11 +125,157 @@ function on(element, event, handler) {
   if (element) element.addEventListener(event, handler);
 }
 
+function getClerkPublishableKey() {
+  return (
+    researchAIConfig.clerkPublishableKey ||
+    window.RESEARCHAI_CLERK_PUBLISHABLE_KEY ||
+    document.querySelector("meta[name='clerk-publishable-key']")?.content ||
+    ""
+  ).trim();
+}
+
+function getPrimaryEmail(user) {
+  return (
+    user?.primaryEmailAddress?.emailAddress ||
+    user?.emailAddresses?.[0]?.emailAddress ||
+    ""
+  );
+}
+
+function updateAuthStateFromClerk() {
+  const clerk = authState.clerk;
+  const user = clerk?.user || null;
+  authState.ready = Boolean(clerk);
+  authState.signedIn = Boolean(user);
+  authState.userId = user?.id || "";
+  authState.email = getPrimaryEmail(user);
+  updateAuthUI();
+}
+
+function updateAuthUI() {
+  const accountCard = els.authStatus?.closest(".auth-card");
+  accountCard?.classList.toggle("is-signed-in", authState.signedIn);
+
+  if (!authState.configured) {
+    if (els.authStatus) els.authStatus.textContent = "Account unavailable";
+    if (els.authMeta) els.authMeta.textContent = "Clerk is not configured yet.";
+    if (els.signInBtn) els.signInBtn.disabled = true;
+    if (els.signUpBtn) els.signUpBtn.disabled = true;
+    if (els.signOutBtn) els.signOutBtn.hidden = true;
+    return;
+  }
+
+  if (authState.signedIn) {
+    if (els.authStatus) els.authStatus.textContent = "Signed in";
+    if (els.authMeta) els.authMeta.textContent = authState.email || authState.userId || "Authenticated account";
+    if (els.signInBtn) els.signInBtn.hidden = true;
+    if (els.signUpBtn) els.signUpBtn.hidden = true;
+    if (els.signOutBtn) {
+      els.signOutBtn.hidden = false;
+      els.signOutBtn.disabled = false;
+    }
+    return;
+  }
+
+  if (els.authStatus) els.authStatus.textContent = "Signed out";
+  if (els.authMeta) els.authMeta.textContent = "Sign in before upgrading to Pro.";
+  if (els.signInBtn) {
+    els.signInBtn.hidden = false;
+    els.signInBtn.disabled = !authState.ready;
+  }
+  if (els.signUpBtn) {
+    els.signUpBtn.hidden = false;
+    els.signUpBtn.disabled = !authState.ready;
+  }
+  if (els.signOutBtn) els.signOutBtn.hidden = true;
+}
+
+function waitForClerkConstructor(attempt = 0) {
+  if (window.Clerk) return Promise.resolve(window.Clerk);
+  if (attempt >= 20) return Promise.resolve(null);
+  return new Promise(resolve => {
+    setTimeout(() => resolve(waitForClerkConstructor(attempt + 1)), 150);
+  });
+}
+
+async function initAuth() {
+  const publishableKey = getClerkPublishableKey();
+  authState.configured = Boolean(publishableKey);
+  updateAuthUI();
+
+  if (!publishableKey) return;
+
+  try {
+    const ClerkConstructor = await waitForClerkConstructor();
+    if (!ClerkConstructor) throw new Error("ClerkJS did not load.");
+
+    const clerk = typeof ClerkConstructor === "function"
+      ? new ClerkConstructor(publishableKey)
+      : ClerkConstructor;
+
+    if (typeof clerk.load === "function") {
+      await clerk.load({ publishableKey });
+    }
+
+    authState.clerk = clerk;
+    authState.ready = true;
+
+    if (typeof clerk.addListener === "function") {
+      clerk.addListener(updateAuthStateFromClerk);
+    }
+
+    updateAuthStateFromClerk();
+  } catch (error) {
+    console.error("[ResearchAI] Clerk initialization failed:", error);
+    authState.ready = false;
+    updateAuthUI();
+  }
+}
+
+function openSignIn() {
+  if (!authState.configured) {
+    showToast("Sign in is not configured yet.", "warn");
+    return;
+  }
+  if (!authState.clerk?.openSignIn) {
+    showToast("Sign in is still loading. Please try again.", "info");
+    return;
+  }
+  authState.clerk.openSignIn();
+}
+
+function openSignUp() {
+  if (!authState.configured) {
+    showToast("Sign up is not configured yet.", "warn");
+    return;
+  }
+  if (!authState.clerk?.openSignUp) {
+    showToast("Sign up is still loading. Please try again.", "info");
+    return;
+  }
+  authState.clerk.openSignUp();
+}
+
+async function signOut() {
+  if (!authState.clerk?.signOut) return;
+  await authState.clerk.signOut();
+  updateAuthStateFromClerk();
+  showToast("Signed out");
+}
+
 let currentPrompt = "";
 let currentReport = null;
 let continuePrompt = "";
 let loadingInterval = null;
 let toastTimer = null;
+const authState = {
+  ready: false,
+  configured: false,
+  signedIn: false,
+  userId: "",
+  email: "",
+  clerk: null
+};
 
 const placeholders = [
   "Research the market for AI legal assistants...",
@@ -2761,12 +2913,23 @@ function handleCheckoutReturn() {
 
 async function startProCheckout() {
   if (!els.proCheckoutBtn) return;
+
+  if (!authState.signedIn) {
+    showToast("Sign in or create an account before upgrading to Pro.", "info");
+    openSignIn();
+    return;
+  }
+
   setCheckoutLoading(true);
 
   try {
     const response = await fetch(researchAIConfig.api.checkoutEndpoint, {
       method: "POST",
-      headers: { "Content-Type": "application/json" }
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        userId: authState.userId,
+        email: authState.email
+      })
     });
     const payload = await response.json().catch(() => null);
 
@@ -3404,6 +3567,9 @@ function bindEvents() {
   });
 
   on(els.proCheckoutBtn, "click", startProCheckout);
+  on(els.signInBtn, "click", openSignIn);
+  on(els.signUpBtn, "click", openSignUp);
+  on(els.signOutBtn, "click", signOut);
 
   on(els.copyReport, "click", copyReport);
   on(els.shareReport, "click", shareReport);
@@ -3467,6 +3633,12 @@ function init() {
     bindEvents();
   } catch (err) {
     console.error("[ResearchAI] bindEvents failed:", err);
+  }
+
+  try {
+    initAuth();
+  } catch (err) {
+    console.error("[ResearchAI] initAuth failed:", err);
   }
 
   try {

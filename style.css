@@ -437,6 +437,48 @@ a {
   display: none;
 }
 
+.auth-card {
+  margin-top: 14px;
+  padding: 16px;
+  border-radius: 22px;
+  background: rgba(255,255,255,.045);
+  border: 1px solid rgba(255,255,255,.09);
+}
+
+.auth-card strong {
+  display: block;
+  margin-bottom: 5px;
+}
+
+.auth-card p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.auth-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.auth-actions button {
+  min-height: 34px;
+  padding: 0 10px;
+  font-size: 12px;
+}
+
+.auth-actions button[hidden] {
+  display: none;
+}
+
+.auth-card.is-signed-in .auth-actions {
+  grid-template-columns: 1fr;
+}
+
 .topbar,
 .report-topbar {
   position: sticky;

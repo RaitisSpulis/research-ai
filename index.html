@@ -8,6 +8,7 @@
   <meta name="author" content="ResearchAI" />
   <meta name="theme-color" content="#05070f" />
   <meta name="robots" content="index, follow" />
+  <meta name="clerk-publishable-key" content="" />
 
   <meta property="og:type" content="website" />
   <meta property="og:title" content="ResearchAI - Professional research workspace" />
@@ -138,6 +139,18 @@
         </div>
         <div class="usage-bar" role="progressbar" aria-valuemin="0" aria-valuemax="5" aria-valuenow="0" id="usageBar" aria-label="Reports used this month">
           <span id="usageFill"></span>
+        </div>
+      </section>
+
+      <section class="auth-card" aria-label="Account">
+        <div>
+          <strong id="authStatus">Signed out</strong>
+          <p id="authMeta">Sign in before upgrading to Pro.</p>
+        </div>
+        <div class="auth-actions">
+          <button class="ghost-btn" type="button" id="signInBtn">Sign in</button>
+          <button class="ghost-btn" type="button" id="signUpBtn">Sign up</button>
+          <button class="ghost-btn" type="button" id="signOutBtn" hidden>Log out</button>
         </div>
       </section>
     </aside>
@@ -354,12 +367,12 @@
             <p>For founders, analysts and operators.</p>
             <strong>$29 <span>/mo</span></strong>
             <ul>
-              <li>Higher monthly report limit</li>
-              <li>Advanced analyst reports</li>
+              <li>Unlimited reports after account activation</li>
+              <li>Priority AI generation</li>
               <li>Decision Scorecards and Reasoning Chains</li>
               <li>Contrarian Analysis and Missing Information Impact</li>
-              <li>Word-compatible export and more saved reports</li>
-              <li>Priority generation and early report types</li>
+              <li>Export tools and saved research history</li>
+              <li>Future premium features and early report types</li>
             </ul>
             <button class="accent-btn" type="button" id="proCheckoutBtn">Upgrade to Pro</button>
           </article>
@@ -486,6 +499,7 @@
 
   <div class="toast" id="toast" role="status" aria-live="polite" aria-atomic="true"></div>
 
+  <script src="https://cdn.jsdelivr.net/npm/@clerk/clerk-js@latest/dist/clerk.browser.js" crossorigin="anonymous"></script>
   <script src="script.js"></script>
 </body>
 </html>

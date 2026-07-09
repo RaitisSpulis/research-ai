@@ -14,7 +14,28 @@ function normalizeSiteUrl(value) {
   return value.replace(/\/+$/, "");
 }
 
-async function createStripeCheckoutSession() {
+function parseBody(request) {
+  if (!request.body) return {};
+  if (typeof request.body === "object") return request.body;
+  try {
+    return JSON.parse(request.body);
+  } catch {
+    return null;
+  }
+}
+
+function validateCheckoutRequest(body) {
+  if (!body) return "Request body must be valid JSON.";
+  if (typeof body.userId !== "string" || !body.userId.trim()) {
+    return "Authenticated user id is required.";
+  }
+  if (body.email && typeof body.email !== "string") {
+    return "User email must be a string.";
+  }
+  return "";
+}
+
+async function createStripeCheckoutSession(user) {
   const stripeSecretKey = requireEnv("STRIPE_SECRET_KEY");
   const priceId = requireEnv("STRIPE_PRO_PRICE_ID");
   const siteUrl = requireEnv("SITE_URL");
@@ -40,8 +61,15 @@ async function createStripeCheckoutSession() {
     "line_items[0][price]": priceId,
     "line_items[0][quantity]": "1",
     allow_promotion_codes: "true",
-    "metadata[product]": "ResearchAI Pro"
+    client_reference_id: user.userId,
+    "metadata[product]": "ResearchAI Pro",
+    "metadata[clerk_user_id]": user.userId
   });
+
+  if (user.email) {
+    body.set("customer_email", user.email);
+    body.set("metadata[email]", user.email);
+  }
 
   const stripeResponse = await fetch(STRIPE_CHECKOUT_URL, {
     method: "POST",
@@ -78,8 +106,18 @@ module.exports = async function handler(request, response) {
     return;
   }
 
+  const body = parseBody(request);
+  const validationError = validateCheckoutRequest(body);
+  if (validationError) {
+    sendError(response, 400, "invalid_request", validationError);
+    return;
+  }
+
   try {
-    const url = await createStripeCheckoutSession();
+    const url = await createStripeCheckoutSession({
+      userId: body.userId.trim(),
+      email: body.email ? body.email.trim() : ""
+    });
     sendOk(response, { url });
   } catch (error) {
     if (error.code === "missing_configuration") {
