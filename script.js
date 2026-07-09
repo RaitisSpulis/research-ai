@@ -171,6 +171,7 @@ function updateAuthStateFromClerk() {
   authState.email = getPrimaryEmail(user);
   updateAuthUI();
   updateUsageUI();
+  console.log("[ResearchAI] Pro status", authState.isPro);
 }
 
 function updateAuthUI() {
@@ -2994,9 +2995,22 @@ function getCheckoutStatus() {
   }
 }
 
-function handleCheckoutReturn() {
+async function reloadClerkUser() {
+  if (!authState.clerk?.user?.reload) {
+    updateAuthStateFromClerk();
+    console.log("[ResearchAI] Clerk user reloaded", false);
+    return;
+  }
+
+  await authState.clerk.user.reload();
+  console.log("[ResearchAI] Clerk user reloaded", true);
+  updateAuthStateFromClerk();
+}
+
+async function handleCheckoutReturn() {
   const status = getCheckoutStatus();
   if (status === "success") {
+    await reloadClerkUser();
     showToast("Payment received. Pro account activation will be completed after account setup.");
   } else if (status === "cancelled") {
     showToast("Checkout cancelled. You can upgrade to Pro anytime.", "info");
@@ -3728,7 +3742,9 @@ function init() {
   }
 
   try {
-    initAuth();
+    initAuth().then(handleCheckoutReturn).catch(err => {
+      console.error("[ResearchAI] auth initialization failed:", err);
+    });
   } catch (err) {
     console.error("[ResearchAI] initAuth failed:", err);
   }
@@ -3741,9 +3757,6 @@ function init() {
     if (reports.length) {
       currentReport = reports[0];
     }
-
-    handleCheckoutReturn();
-
     setInterval(rotatePlaceholder, 2800);
   } catch (err) {
     console.error("[ResearchAI] post-bind init failed:", err);

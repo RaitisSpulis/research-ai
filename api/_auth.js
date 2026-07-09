@@ -66,6 +66,7 @@ async function markUserPro(userId, subscription = {}) {
   }
 
   const activatedAt = new Date().toISOString();
+  console.log("[Clerk] marking user Pro", userId);
   return clerkRequest(`/users/${encodeURIComponent(userId)}/metadata`, {
     method: "PATCH",
     body: JSON.stringify({

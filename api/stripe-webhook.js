@@ -4,11 +4,17 @@ const { sendError, sendOk } = require("./_responses");
 
 const SIGNATURE_TOLERANCE_SECONDS = 300;
 
-function getRawBody(request) {
+async function getRawBody(request) {
+  if (Buffer.isBuffer(request.rawBody)) return request.rawBody.toString("utf8");
+  if (typeof request.rawBody === "string") return request.rawBody;
   if (Buffer.isBuffer(request.body)) return request.body.toString("utf8");
   if (typeof request.body === "string") return request.body;
-  if (request.rawBody) return Buffer.isBuffer(request.rawBody) ? request.rawBody.toString("utf8") : String(request.rawBody);
-  return JSON.stringify(request.body || {});
+
+  const chunks = [];
+  for await (const chunk of request) {
+    chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+  }
+  return Buffer.concat(chunks).toString("utf8");
 }
 
 function parseStripeSignature(header) {
@@ -40,7 +46,7 @@ function verifyStripeSignature(rawBody, signatureHeader, secret) {
   const parsed = parseStripeSignature(signatureHeader);
   if (!parsed.timestamp || !parsed.signatures.length) {
     const error = new Error("Stripe webhook signature is missing.");
-    error.code = "invalid_signature";
+    error.code = "missing_stripe_signature";
     throw error;
   }
 
@@ -75,6 +81,11 @@ function getHeader(request, name) {
   return request.headers?.[name] || request.headers?.[name.toLowerCase()] || request.headers?.[name.toUpperCase()];
 }
 
+function constructStripeEvent(rawBody, signature, secret) {
+  verifyStripeSignature(rawBody, signature, secret);
+  return JSON.parse(rawBody);
+}
+
 function getClerkUserIdFromSession(session) {
   return (
     session?.client_reference_id ||
@@ -85,46 +96,64 @@ function getClerkUserIdFromSession(session) {
 }
 
 async function handleCheckoutCompleted(session) {
+  console.log("[Stripe webhook] checkout.session.completed");
   const userId = getClerkUserIdFromSession(session);
   if (!userId) {
     const error = new Error("Checkout session did not include a Clerk user id.");
     error.code = "missing_clerk_user";
     throw error;
   }
+  console.log("[Stripe webhook] clerk user id found", userId);
 
   await markUserPro(userId, {
     customerId: session.customer || "",
     subscriptionId: session.subscription || "",
     checkoutSessionId: session.id || ""
   });
+  console.log("[Stripe webhook] Clerk user marked Pro", userId);
 }
 
-module.exports = async function handler(request, response) {
+async function handler(request, response) {
   if (request.method !== "POST") {
     response.setHeader("Allow", "POST");
     sendError(response, 400, "method_not_allowed", "Use POST for Stripe webhooks.");
     return;
   }
 
-  const rawBody = getRawBody(request);
+  const secret = process.env.STRIPE_WEBHOOK_SECRET;
   const signature = getHeader(request, "stripe-signature");
+  console.log("[Stripe webhook] secret present", Boolean(secret));
+  console.log("[Stripe webhook] signature header present", Boolean(signature));
 
+  if (!secret) {
+    sendError(response, 500, "missing_webhook_secret", "Stripe webhook secret is not configured.");
+    return;
+  }
+
+  if (!signature) {
+    sendError(response, 400, "missing_stripe_signature", "Stripe webhook signature header is missing.");
+    return;
+  }
+
+  let rawBody;
   try {
-    verifyStripeSignature(rawBody, signature, process.env.STRIPE_WEBHOOK_SECRET);
+    rawBody = await getRawBody(request);
   } catch (error) {
-    sendError(response, 400, error.code || "invalid_signature", "Invalid Stripe webhook signature.");
+    console.error("[Stripe webhook] raw body read failed:", error);
+    sendError(response, 400, "invalid_payload", "Stripe webhook raw body could not be read.");
     return;
   }
 
   let event;
   try {
-    event = JSON.parse(rawBody);
-  } catch {
-    sendError(response, 400, "invalid_payload", "Stripe webhook payload must be valid JSON.");
+    event = constructStripeEvent(rawBody, signature, secret);
+  } catch (error) {
+    sendError(response, 400, error.code || "invalid_signature", "Invalid Stripe webhook signature.");
     return;
   }
 
   try {
+    console.log("[Stripe webhook] received event", event.type);
     if (event.type === "checkout.session.completed") {
       await handleCheckoutCompleted(event.data?.object);
     }
@@ -137,9 +166,17 @@ module.exports = async function handler(request, response) {
     console.error("[ResearchAI] Stripe webhook failed:", error);
     sendError(response, 500, error.code || "webhook_failed", "Stripe webhook could not be processed.");
   }
-};
+}
 
+module.exports = handler;
+module.exports.config = {
+  api: {
+    bodyParser: false
+  }
+};
 module.exports._test = {
+  constructStripeEvent,
+  getRawBody,
   verifyStripeSignature,
   getClerkUserIdFromSession
 };

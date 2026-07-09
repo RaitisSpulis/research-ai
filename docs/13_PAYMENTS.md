@@ -81,7 +81,7 @@ The browser redirects the user to the returned Stripe Checkout URL.
 
 Create a Stripe webhook endpoint pointing to:
 
-`https://your-domain.com/api/stripe-webhook`
+`https://research-ai-tau-steel.vercel.app/api/stripe-webhook`
 
 Subscribe to:
 
@@ -96,6 +96,8 @@ The webhook:
 1. Verifies the Stripe signature.
 2. Reads the Clerk user id from `client_reference_id` or session metadata.
 3. Marks the Clerk user as Pro in public and private metadata.
+
+Use Stripe Dashboard -> Developers -> Events -> `checkout.session.completed` to confirm delivery succeeded. If delivery fails, inspect the Vercel function logs for `[Stripe webhook]` messages.
 
 The checkout session stores:
 
