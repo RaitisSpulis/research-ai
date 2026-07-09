@@ -145,12 +145,12 @@ async function testSubscriptionUpdatedCancellationLookup() {
       };
     }
 
-    if (requestUrl.includes("/rest/v1/users?on_conflict=clerk_user_id")) {
+    if (requestUrl.includes("/rest/v1/users?clerk_user_id=eq.") && options.method === "PATCH") {
       const body = JSON.parse(options.body);
       return {
         ok: true,
         status: 200,
-        text: async () => JSON.stringify(body)
+        text: async () => JSON.stringify([body])
       };
     }
 
@@ -181,17 +181,73 @@ async function testSubscriptionUpdatedCancellationLookup() {
     });
 
     const supabaseUpdates = calls
-      .filter(call => call.url.includes("/rest/v1/users?on_conflict=clerk_user_id"))
-      .map(call => JSON.parse(call.options.body)[0]);
+      .filter(call => call.url.includes("/rest/v1/users?clerk_user_id=eq.") && call.options.method === "PATCH")
+      .map(call => ({
+        url: call.url,
+        body: JSON.parse(call.options.body)
+      }));
 
-    assert(supabaseUpdates.some(update => update.clerk_user_id === "user_by_subscription"));
-    assert(supabaseUpdates.some(update => update.clerk_user_id === "user_by_customer"));
+    assert(supabaseUpdates.some(update => update.url.includes("clerk_user_id=eq.user_by_subscription")));
+    assert(supabaseUpdates.some(update => update.url.includes("clerk_user_id=eq.user_by_customer")));
     supabaseUpdates.forEach(update => {
-      assert.strictEqual(update.plan, "pro");
-      assert.strictEqual(update.subscription_status, "cancelling");
-      assert.strictEqual(update.cancel_at_period_end, true);
-      assert.strictEqual(update.current_period_end, "2026-08-09T00:00:00.000Z");
+      assert.strictEqual(update.body.plan, "pro");
+      assert.strictEqual(update.body.subscription_status, "cancelling");
+      assert.strictEqual(update.body.cancel_at_period_end, true);
+      assert.strictEqual(update.body.current_period_end, "2026-08-09T00:00:00.000Z");
     });
+  } finally {
+    global.fetch = originalFetch;
+  }
+}
+
+async function testSubscriptionUpdatedFailsWhenNoUserRowUpdated() {
+  const { handleSubscriptionUpdated } = require("../api/stripe-webhook")._test;
+  process.env.SUPABASE_URL = "https://supabase.test";
+  process.env.SUPABASE_SERVICE_ROLE_KEY = "service_role_test";
+  process.env.CLERK_SECRET_KEY = "clerk_secret_test";
+
+  const originalFetch = global.fetch;
+  global.fetch = async (url, options = {}) => {
+    const requestUrl = String(url);
+
+    if (requestUrl.startsWith("https://api.clerk.com")) {
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({ id: "user_from_clerk" })
+      };
+    }
+
+    if (requestUrl.includes("stripe_subscription_id=eq.sub_no_update")) {
+      return {
+        ok: true,
+        status: 200,
+        text: async () => JSON.stringify([{ clerk_user_id: "user_no_update" }])
+      };
+    }
+
+    if (requestUrl.includes("/rest/v1/users?clerk_user_id=eq.user_no_update") && options.method === "PATCH") {
+      return {
+        ok: true,
+        status: 200,
+        text: async () => "[]"
+      };
+    }
+
+    return { ok: true, status: 200, text: async () => "[]" };
+  };
+
+  try {
+    await assert.rejects(() => handleSubscriptionUpdated({
+      id: "sub_no_update",
+      customer: "cus_no_update",
+      status: "active",
+      cancel_at_period_end: true,
+      items: {
+        data: [{ current_period_end: 1786233600 }]
+      },
+      metadata: {}
+    }), error => error.code === "supabase_no_rows_updated");
   } finally {
     global.fetch = originalFetch;
   }
@@ -242,6 +298,7 @@ async function main() {
   testStripeWebhookSignature();
   await testSupabaseUsageAndOwnershipQueries();
   await testSubscriptionUpdatedCancellationLookup();
+  await testSubscriptionUpdatedFailsWhenNoUserRowUpdated();
   await testGenerateAuthAndDemoFlow();
   testFrontendStaticSmoke();
   console.log("beta QA mocks passed");

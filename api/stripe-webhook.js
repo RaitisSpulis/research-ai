@@ -182,6 +182,28 @@ function getSubscriptionTiming(subscription = {}) {
   };
 }
 
+function getSubscriptionUpdatePayload(userId, plan, subscription = {}) {
+  const payload = {
+    clerk_user_id: userId,
+    plan: plan || "free"
+  };
+
+  if (subscription.customerId !== undefined) payload.stripe_customer_id = subscription.customerId || "";
+  if (subscription.subscriptionId !== undefined) payload.stripe_subscription_id = subscription.subscriptionId || "";
+  if (subscription.status !== undefined) payload.subscription_status = subscription.status || "";
+  if (subscription.cancelAtPeriodEnd !== undefined) payload.cancel_at_period_end = Boolean(subscription.cancelAtPeriodEnd);
+  if (subscription.currentPeriodEnd !== undefined) payload.current_period_end = subscription.currentPeriodEnd || null;
+
+  return payload;
+}
+
+function logSubscriptionUpdatePayload(payload) {
+  console.log("[Subscription updated] Supabase update payload", {
+    keys: Object.keys(payload),
+    values: payload
+  });
+}
+
 async function resolveUserIdForSubscription(subscription = {}) {
   const metadataUserId = getClerkUserIdFromSubscription(subscription);
   if (metadataUserId) {
@@ -225,6 +247,10 @@ async function syncSubscriptionToClerkAndSupabase(userId, plan, subscription = {
     return;
   }
 
+  if (subscription.debugUpdatePayload) {
+    logSubscriptionUpdatePayload(getSubscriptionUpdatePayload(userId, plan, subscription));
+  }
+
   if (plan === "pro") {
     await markUserPro(userId, subscription);
     console.log("[Subscription sync] Clerk updated", userId);
@@ -233,10 +259,33 @@ async function syncSubscriptionToClerkAndSupabase(userId, plan, subscription = {
     console.log("[Subscription sync] Clerk updated", userId);
   }
 
-  await updateUserPlan(userId, plan, subscription);
+  let updatedUser;
+  try {
+    updatedUser = await updateUserPlan(userId, plan, subscription);
+  } catch (error) {
+    if (subscription.debugUpdatePayload) {
+      console.log("[Subscription updated] Supabase update error", {
+        code: error.code || null,
+        statusCode: error.statusCode || null,
+        details: error.details || null
+      });
+    }
+    throw error;
+  }
   console.log("[Subscription sync] Supabase plan updated", userId, plan);
   console.log("[Subscription sync] cancel_at_period_end", Boolean(subscription.cancelAtPeriodEnd));
   console.log("[Subscription sync] current_period_end", subscription.currentPeriodEnd || null);
+  if (subscription.debugUpdatePayload) {
+    console.log("[Subscription updated] Supabase update response", {
+      clerk_user_id: updatedUser?.clerk_user_id || null,
+      plan: updatedUser?.plan || null,
+      subscription_status: updatedUser?.subscription_status || null,
+      stripe_customer_id: updatedUser?.stripe_customer_id || null,
+      stripe_subscription_id: updatedUser?.stripe_subscription_id || null,
+      cancel_at_period_end: Boolean(updatedUser?.cancel_at_period_end),
+      current_period_end: updatedUser?.current_period_end || null
+    });
+  }
 }
 
 async function handleCheckoutCompleted(session) {
@@ -258,17 +307,23 @@ async function handleCheckoutCompleted(session) {
   });
 }
 
-async function handleSubscriptionUpdated(subscription) {
+async function handleSubscriptionUpdated(subscription, eventId = "") {
+  console.log("[Subscription updated] event id", eventId || null);
   console.log("[Subscription updated] subscription id", subscription?.id || null);
   console.log("[Subscription updated] customer id", subscription?.customer || null);
   console.log("[Subscription updated] status", subscription?.status || null);
-  console.log("[Subscription updated] cancel_at_period_end", Boolean(subscription?.cancel_at_period_end));
+  console.log("[Subscription updated] cancel_at_period_end value", subscription?.cancel_at_period_end);
+  console.log("[Subscription updated] cancel_at_period_end typeof", typeof subscription?.cancel_at_period_end);
+  console.log("[Subscription updated] subscription.current_period_end", subscription?.current_period_end || null);
+  console.log("[Subscription updated] subscription.items.data.length", Array.isArray(subscription?.items?.data) ? subscription.items.data.length : null);
+  console.log("[Subscription updated] first item current_period_end", subscription?.items?.data?.[0]?.current_period_end || null);
   const timing = getSubscriptionTiming(subscription);
   console.log("[Subscription updated] current_period_end", timing.currentPeriodEnd || null);
   console.log("[Subscription updated] current_period_end source", timing.currentPeriodEndPath);
 
   const resolved = await resolveUserIdForSubscription(subscription);
   const userId = resolved.userId;
+  console.log("[Subscription updated] matched user id", userId || null);
   console.log("[Subscription updated] matched user source", resolved.source);
 
   if (!userId) {
@@ -281,7 +336,9 @@ async function handleSubscriptionUpdated(subscription) {
     customerId: subscription?.customer || "",
     subscriptionId: subscription?.id || "",
     status: syncStatus.status,
-    ...timing
+    ...timing,
+    allowInsert: false,
+    debugUpdatePayload: true
   });
   console.log("[Subscription updated] Supabase update success", userId);
 }
@@ -365,7 +422,7 @@ async function handler(request, response) {
       await handleCheckoutCompleted(event.data?.object);
     }
     if (event.type === "customer.subscription.updated") {
-      await handleSubscriptionUpdated(event.data?.object);
+      await handleSubscriptionUpdated(event.data?.object, event.id || "");
     }
     if (event.type === "customer.subscription.deleted") {
       await handleSubscriptionInactive(event.data?.object, "canceled");
@@ -404,6 +461,7 @@ module.exports._test = {
   getSubscriptionSyncStatus,
   getSubscriptionTiming,
   getStripeTimestampWithPath,
+  getSubscriptionUpdatePayload,
   handleSubscriptionUpdated,
   resolveUserIdForSubscription,
   unixTimestampToIso,

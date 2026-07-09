@@ -134,11 +134,35 @@ async function updateUserPlan(userId, plan, subscription = {}) {
   if (subscription.cancelAtPeriodEnd !== undefined) payload.cancel_at_period_end = Boolean(subscription.cancelAtPeriodEnd);
   if (subscription.currentPeriodEnd !== undefined) payload.current_period_end = subscription.currentPeriodEnd || null;
 
-  const [user] = await supabaseRequest("/rest/v1/users?on_conflict=clerk_user_id", {
-    method: "POST",
-    headers: { Prefer: "resolution=merge-duplicates,return=representation" },
-    body: JSON.stringify([payload])
+  const patchPath = `/rest/v1/users?clerk_user_id=eq.${encodeURIComponent(userId)}&select=*`;
+  let rows = await supabaseRequest(patchPath, {
+    method: "PATCH",
+    headers: { Prefer: "return=representation" },
+    body: JSON.stringify(payload)
   });
+
+  if (!Array.isArray(rows) || rows.length === 0) {
+    if (subscription.allowInsert === false) {
+      const error = new Error("Supabase user plan update matched no rows.");
+      error.code = "supabase_no_rows_updated";
+      error.payload = payload;
+      throw error;
+    }
+
+    rows = await supabaseRequest("/rest/v1/users?on_conflict=clerk_user_id", {
+      method: "POST",
+      headers: { Prefer: "resolution=merge-duplicates,return=representation" },
+      body: JSON.stringify([payload])
+    });
+  }
+
+  const [user] = rows;
+  if (!user) {
+    const error = new Error("Supabase user plan update returned no row.");
+    error.code = "supabase_no_rows_updated";
+    error.payload = payload;
+    throw error;
+  }
 
   return user;
 }
