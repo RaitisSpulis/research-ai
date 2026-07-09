@@ -252,26 +252,36 @@ function waitForClerkConstructor(attempt = 0) {
 }
 
 async function initAuth() {
-  const publishableKey = await resolveClerkPublishableKey();
+  authState.ready = false;
+  authState.configured = false;
+  updateAuthUI();
+
+  const config = await fetch(researchAIConfig.api.publicConfigEndpoint).then(response => response.json()).catch(error => {
+    console.warn("[ResearchAI] public config unavailable:", error);
+    return {};
+  });
+  const publishableKey = (config.clerkPublishableKey || "").trim();
+
+  console.log("[ResearchAI] Clerk public config loaded", Boolean(publishableKey));
+
   authState.configured = Boolean(publishableKey);
   updateAuthUI();
 
-  if (!publishableKey) return;
+  if (!publishableKey) {
+    console.log("[ResearchAI] Clerk loaded", false);
+    return;
+  }
 
   try {
     const ClerkConstructor = await waitForClerkConstructor();
     if (!ClerkConstructor) throw new Error("ClerkJS did not load.");
 
-    const clerk = typeof ClerkConstructor === "function"
-      ? new ClerkConstructor(publishableKey)
-      : ClerkConstructor;
-
-    if (typeof clerk.load === "function") {
-      await clerk.load({ publishableKey });
-    }
+    const clerk = new ClerkConstructor(publishableKey);
+    await clerk.load();
 
     authState.clerk = clerk;
     authState.ready = true;
+    console.log("[ResearchAI] Clerk loaded", true);
 
     if (typeof clerk.addListener === "function") {
       clerk.addListener(updateAuthStateFromClerk);
@@ -281,6 +291,7 @@ async function initAuth() {
   } catch (error) {
     console.error("[ResearchAI] Clerk initialization failed:", error);
     authState.ready = false;
+    console.log("[ResearchAI] Clerk loaded", false);
     updateAuthUI();
   }
 }
