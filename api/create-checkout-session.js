@@ -1,4 +1,5 @@
 const { sendError, sendOk } = require("./_responses");
+const { getAuthToken, getExpectedClerkIssuer, verifyClerkToken } = require("./_clerk-token");
 
 const STRIPE_CHECKOUT_URL = "https://api.stripe.com/v1/checkout/sessions";
 
@@ -35,6 +36,17 @@ function validateCheckoutRequest(body) {
   return "";
 }
 
+async function validateAuthMatchesUser(request, userId) {
+  const token = getAuthToken(request);
+  if (!token) return "Authentication token is required.";
+
+  const payload = await verifyClerkToken(token);
+  if (!payload?.sub) return "Authentication token is invalid.";
+  if (payload.sub !== userId) return "Authenticated user does not match checkout user.";
+
+  return "";
+}
+
 async function createStripeCheckoutSession(user) {
   const stripeSecretKey = requireEnv("STRIPE_SECRET_KEY");
   const priceId = requireEnv("STRIPE_PRO_PRICE_ID");
@@ -64,7 +76,9 @@ async function createStripeCheckoutSession(user) {
     client_reference_id: user.userId,
     "metadata[product]": "ResearchAI Pro",
     "metadata[clerkUserId]": user.userId,
-    "metadata[clerk_user_id]": user.userId
+    "metadata[clerk_user_id]": user.userId,
+    "subscription_data[metadata][clerkUserId]": user.userId,
+    "subscription_data[metadata][clerk_user_id]": user.userId
   });
 
   if (user.email) {
@@ -114,6 +128,12 @@ module.exports = async function handler(request, response) {
     return;
   }
 
+  const authError = await validateAuthMatchesUser(request, body.userId.trim());
+  if (authError) {
+    sendError(response, 401, "unauthorized", authError);
+    return;
+  }
+
   try {
     const url = await createStripeCheckoutSession({
       userId: body.userId.trim(),
@@ -140,4 +160,9 @@ module.exports = async function handler(request, response) {
 
     sendError(response, 500, error.code || "checkout_failed", "Stripe checkout could not be started.");
   }
+};
+
+module.exports._test = {
+  getExpectedClerkIssuer,
+  verifyClerkToken
 };

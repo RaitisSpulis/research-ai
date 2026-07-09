@@ -89,8 +89,39 @@ async function markUserPro(userId, subscription = {}) {
   });
 }
 
+async function markUserFree(userId, subscription = {}) {
+  if (!userId) {
+    const error = new Error("Clerk user id is required.");
+    error.code = "missing_user_id";
+    throw error;
+  }
+
+  const updatedAt = new Date().toISOString();
+  console.log("[Clerk] marking user Free", userId);
+  return clerkRequest(`/users/${encodeURIComponent(userId)}/metadata`, {
+    method: "PATCH",
+    body: JSON.stringify({
+      public_metadata: {
+        pro: false,
+        plan: "free",
+        subscriptionStatus: subscription.status || "inactive",
+        proDeactivatedAt: updatedAt
+      },
+      private_metadata: {
+        pro: false,
+        plan: "free",
+        subscriptionStatus: subscription.status || "inactive",
+        proDeactivatedAt: updatedAt,
+        stripeCustomerId: subscription.customerId || "",
+        stripeSubscriptionId: subscription.subscriptionId || ""
+      }
+    })
+  });
+}
+
 module.exports = {
   getClerkUser,
   isUserPro,
+  markUserFree,
   markUserPro
 };

@@ -35,6 +35,8 @@ const researchAIConfig = {
     generateEndpoint: "/api/generate",
     checkoutEndpoint: "/api/create-checkout-session",
     publicConfigEndpoint: "/api/public-config",
+    reportsEndpoint: "/api/reports",
+    usageEndpoint: "/api/usage",
     timeoutMs: 30000
   },
   providers: {
@@ -140,6 +142,40 @@ async function fetchPublicConfig() {
   }
 }
 
+async function getClerkSessionToken() {
+  return await authState.clerk?.session?.getToken?.();
+}
+
+async function authenticatedApi(endpoint, options = {}) {
+  const token = await getClerkSessionToken();
+  if (!token) {
+    const error = new Error("Authentication session is not ready.");
+    error.code = "unauthorized";
+    throw error;
+  }
+
+  const response = await fetch(endpoint, {
+    ...options,
+    headers: {
+      Accept: "application/json",
+      ...(options.body ? { "Content-Type": "application/json" } : {}),
+      ...(options.headers || {}),
+      Authorization: `Bearer ${token}`
+    }
+  });
+
+  const payload = await response.json().catch(() => null);
+  if (!response.ok || payload?.ok === false) {
+    const error = new Error(payload?.error?.message || "Request failed.");
+    error.code = payload?.error?.code || "request_failed";
+    error.status = response.status;
+    error.details = payload?.error?.details || null;
+    throw error;
+  }
+
+  return payload || {};
+}
+
 function getPrimaryEmail(user) {
   return (
     user?.primaryEmailAddress?.emailAddress ||
@@ -164,13 +200,20 @@ function isProUser() {
 function updateAuthStateFromClerk() {
   const clerk = authState.clerk;
   const user = clerk?.user || null;
+  const wasSignedIn = authState.signedIn;
   authState.ready = Boolean(clerk);
   authState.signedIn = Boolean(user);
   authState.isPro = userHasProMetadata(user);
   authState.userId = user?.id || "";
   authState.email = getPrimaryEmail(user);
+  if (!authState.signedIn) {
+    serverUsageState = null;
+  }
   updateAuthUI();
   updateUsageUI();
+  if (authState.signedIn && (!wasSignedIn || !workspaceSyncPromise)) {
+    syncWorkspaceFromServer();
+  }
   console.log("[ResearchAI] Pro status", authState.isPro);
 }
 
@@ -356,6 +399,8 @@ let continuePrompt = "";
 let loadingInterval = null;
 let toastTimer = null;
 let authInitPromise = null;
+let serverUsageState = null;
+let workspaceSyncPromise = null;
 const authState = {
   ready: false,
   configured: false,
@@ -465,15 +510,68 @@ function saveReports(reports) {
   localStorage.setItem(STORAGE_KEY, JSON.stringify((isDeveloperMode() || isProUser()) ? sorted : sorted.slice(0, 50)));
 }
 
+function cacheServerReports(reports) {
+  if (!Array.isArray(reports)) return;
+  saveReports(reports);
+}
+
+function applyServerUsage(usage) {
+  if (!usage || typeof usage !== "object") return;
+  serverUsageState = {
+    count: Number(usage.count || 0),
+    monthly_limit: Number(usage.monthly_limit || FREE_LIMIT),
+    month: usage.month || ""
+  };
+  updateUsageUI();
+}
+
+async function syncWorkspaceFromServer() {
+  if (!authState.signedIn || isDeveloperMode()) return;
+
+  workspaceSyncPromise = authenticatedApi(researchAIConfig.api.reportsEndpoint)
+    .then(payload => {
+      if (Array.isArray(payload.reports)) {
+        cacheServerReports(payload.reports);
+        renderRecentReports();
+      }
+      applyServerUsage(payload.usage);
+      return payload;
+    })
+    .catch(error => {
+      console.warn("[ResearchAI] workspace sync unavailable:", error);
+      return null;
+    });
+
+  return workspaceSyncPromise;
+}
+
+async function refreshServerUsage() {
+  if (!authState.signedIn || isDeveloperMode()) return null;
+  try {
+    const payload = await authenticatedApi(researchAIConfig.api.usageEndpoint);
+    applyServerUsage(payload.usage);
+    return payload.usage || null;
+  } catch (error) {
+    console.warn("[ResearchAI] usage sync unavailable:", error);
+    return null;
+  }
+}
+
 function normalizeReport(report) {
+  const prompt = report.prompt || "";
+  const fallback = (Array.isArray(report.sections) || Array.isArray(report.findings) || !prompt)
+    ? {}
+    : analyzePrompt(prompt);
+
   return {
+    ...fallback,
     ...report,
-    id: report.id || hashCode(`${report.prompt || report.title || "report"}${report.createdAt || Date.now()}`),
-    title: report.title || titleFromPrompt(report.prompt || "Professional Research Report"),
-    prompt: report.prompt || "",
+    id: String(report.id || hashCode(`${prompt || report.title || "report"}${report.createdAt || Date.now()}`)),
+    title: report.title || titleFromPrompt(prompt || "Professional Research Report"),
+    prompt,
     reportType: report.reportType || report.intent || report.category || "general_research",
     createdAt: report.createdAt || new Date().toISOString(),
-    contentHtml: report.contentHtml || "",
+    contentHtml: "",
     pinned: Boolean(report.pinned || report.favorite),
     favorite: Boolean(report.pinned || report.favorite)
   };
@@ -488,6 +586,7 @@ function sortReports(reports) {
 
 function getUsage() {
   if (isDeveloperMode() || isProUser()) return 0;
+  if (authState.signedIn && serverUsageState) return Number(serverUsageState.count || 0);
 
   try {
     const data = JSON.parse(localStorage.getItem(USAGE_KEY));
@@ -504,6 +603,11 @@ function incrementUsage() {
   if (isDeveloperMode() || isProUser()) {
     updateUsageUI();
     return 0;
+  }
+
+  if (authState.signedIn) {
+    refreshServerUsage();
+    return getUsage();
   }
 
   const now = new Date();
@@ -537,9 +641,10 @@ function updateUsageUI() {
   }
 
   const used = getUsage();
-  els.usageText.textContent = `${used} of ${FREE_LIMIT} reports used this month`;
+  const monthlyLimit = Number(serverUsageState?.monthly_limit || FREE_LIMIT);
+  els.usageText.textContent = `${used} of ${monthlyLimit} reports used this month`;
   els.usageBar.setAttribute("aria-valuenow", String(used));
-  els.usageFill.style.width = `${Math.min(100, (used / FREE_LIMIT) * 100)}%`;
+  els.usageFill.style.width = `${Math.min(100, (used / monthlyLimit) * 100)}%`;
 }
 
 /* -- Prompt analysis -- */
@@ -987,9 +1092,15 @@ class GeminiProvider extends ReportProvider {
     const timeout = setTimeout(() => controller.abort(), this.config.timeoutMs || 30000);
 
     try {
+      const token = await getClerkSessionToken();
+      const headers = { "Content-Type": "application/json" };
+      if (token) {
+        headers.Authorization = `Bearer ${token}`;
+      }
+
       const response = await fetch(this.config.generateEndpoint, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers,
         signal: controller.signal,
         body: JSON.stringify(request)
       });
@@ -1001,6 +1112,14 @@ class GeminiProvider extends ReportProvider {
 
       if (!payload?.report) {
         throw new InvalidResponse("AI response did not include a report.");
+      }
+
+      if (payload.usageCounted) {
+        payload.report._usageCounted = true;
+      }
+      if (payload.usage) {
+        payload.report._serverUsage = payload.usage;
+        applyServerUsage(payload.usage);
       }
 
       return payload.report;
@@ -1048,6 +1167,9 @@ class AIService {
       return parseProviderResponse(rawResponse, request);
     } catch (err) {
       const normalized = normalizeProviderError(err);
+      if (normalized.type === "RateLimited" || normalized.type === "Unauthorized") {
+        throw normalized;
+      }
       if (request.mode !== "demo") {
         const demoRequest = { ...request, mode: "demo" };
         const demoReport = parseProviderResponse(await this.providers.demo.generate(demoRequest), demoRequest);
@@ -1975,7 +2097,7 @@ function insightCard(title, text) {
     return `<div><strong>${escapeHtml(title)}</strong><ul class="comparison-list">${items}</ul></div>`;
   }
 
-  return `<div><strong>${escapeHtml(title)}</strong><p>${text}</p></div>`;
+  return `<div><strong>${escapeHtml(title)}</strong><p>${escapeHtml(text)}</p></div>`;
 }
 
 function scorecardCard(card) {
@@ -2924,7 +3046,7 @@ function applyBarWidths(container) {
 function renderReport(data) {
   currentReport = normalizeReport(data);
   currentPrompt = currentReport.prompt;
-  els.reportContent.innerHTML = currentReport.contentHtml || buildReportHTML(currentReport);
+  els.reportContent.innerHTML = buildReportHTML(currentReport);
   applyBarWidths(els.reportContent);
 
   els.reportTopTitle.textContent = currentReport.title;
@@ -3029,9 +3151,17 @@ async function startProCheckout() {
   setCheckoutLoading(true);
 
   try {
+    const token = await getClerkSessionToken();
+    if (!token) {
+      throw new Error("Authentication session is not ready.");
+    }
+
     const response = await fetch(researchAIConfig.api.checkoutEndpoint, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`
+      },
       body: JSON.stringify({
         userId: authState.userId,
         email: authState.email
@@ -3138,17 +3268,36 @@ function renderRecentReports() {
   els.continueText.textContent = `Continue "${latest.title}" with deeper pricing, competitors and assumptions.`;
 }
 
-function saveReport(data) {
+async function saveReport(data) {
   const reports = getReports();
   const entry = normalizeReport({
     ...data,
     id: hashCode(data.prompt + Date.now()),
     createdAt: new Date().toISOString(),
     reportType: data.intent || data.category || "general_research",
-    contentHtml: buildReportHTML(data),
+    contentHtml: "",
     pinned: false,
     favorite: false
   });
+
+  if (authState.signedIn && !isDeveloperMode()) {
+    const payload = await authenticatedApi(researchAIConfig.api.reportsEndpoint, {
+      method: "POST",
+      body: JSON.stringify({
+        report: entry,
+        countUsage: !data._usageCounted
+      })
+    });
+    if (Array.isArray(payload.reports)) {
+      cacheServerReports(payload.reports);
+    } else if (payload.report) {
+      saveReports([payload.report, ...reports.filter(report => report.id !== payload.report.id)]);
+    }
+    applyServerUsage(payload.usage);
+    renderRecentReports();
+    return normalizeReport(payload.report || entry);
+  }
+
   reports.unshift(entry);
   saveReports(reports);
   renderRecentReports();
@@ -3169,7 +3318,7 @@ function updateFavoriteButton() {
   els.favoriteReport.classList.toggle("is-favorite", pinned);
 }
 
-function toggleReportPin(id) {
+async function toggleReportPin(id) {
   const reports = getReports();
   const idx = reports.findIndex(r => r.id === id);
   if (idx === -1) return;
@@ -3181,16 +3330,42 @@ function toggleReportPin(id) {
     currentReport.favorite = reports[idx].pinned;
   }
   saveReports(reports);
+  if (authState.signedIn && !isDeveloperMode()) {
+    authenticatedApi(researchAIConfig.api.reportsEndpoint, {
+      method: "PATCH",
+      body: JSON.stringify({ id: String(id), pinned: reports[idx].pinned })
+    }).then(payload => {
+      if (Array.isArray(payload.reports)) {
+        cacheServerReports(payload.reports);
+        renderRecentReports();
+      }
+    }).catch(error => {
+      console.warn("[ResearchAI] pin sync unavailable:", error);
+    });
+  }
   updateFavoriteButton();
   renderRecentReports();
   showToast(reports[idx].pinned ? "Report pinned" : "Report unpinned");
 }
 
-function deleteReport(id) {
+async function deleteReport(id) {
   const reports = getReports();
   const report = reports.find(r => r.id === id);
   const nextReports = reports.filter(r => r.id !== id);
   saveReports(nextReports);
+  if (authState.signedIn && !isDeveloperMode()) {
+    authenticatedApi(researchAIConfig.api.reportsEndpoint, {
+      method: "DELETE",
+      body: JSON.stringify({ id: String(id) })
+    }).then(payload => {
+      if (Array.isArray(payload.reports)) {
+        cacheServerReports(payload.reports);
+        renderRecentReports();
+      }
+    }).catch(error => {
+      console.warn("[ResearchAI] delete sync unavailable:", error);
+    });
+  }
   if (currentReport && currentReport.id === id) {
     currentReport = nextReports[0] || null;
     if (currentReport) renderReport(currentReport);
@@ -3222,11 +3397,10 @@ function startResearch() {
     return;
   }
 
-  if (!isDeveloperMode() && !isProUser()) {
-    if (getUsage() >= FREE_LIMIT) {
-      showToast("Free report limit reached. Upgrade to Pro for a higher monthly report limit.", "warn");
-      return;
-    }
+  if (!isDeveloperMode() && !authState.signedIn) {
+    showToast("Sign in to generate and save reports across devices.", "info");
+    openSignIn();
+    return;
   }
 
   showInputError("");
@@ -3278,7 +3452,6 @@ function startResearch() {
       setTimeout(async () => {
         try {
           const saved = await reportController.generateAndSaveReport(currentPrompt);
-          incrementUsage();
           renderReport(saved);
           showView("report");
           if (saved.aiFallback) {
@@ -3339,8 +3512,8 @@ function openPanel(name) {
     els.panelBody.innerHTML = `
       <div class="settings-group">
         <h3>Workspace</h3>
-        <p>Reports are stored locally in this browser. No saved report data is sent to a server.</p>
-        <button class="ghost-btn" type="button" id="clearHistoryBtn">Clear report history</button>
+        <p>Signed-in workspaces save reports to ResearchAI's database and keep a local browser cache for faster access.</p>
+        <button class="ghost-btn" type="button" id="clearHistoryBtn">Clear local cache</button>
         ${resetUsageControl}
       </div>
       <div class="settings-group">
@@ -3353,7 +3526,7 @@ function openPanel(name) {
       currentReport = null;
       renderRecentReports();
       showReportContent(false);
-      showToast("History cleared");
+      showToast("Local report cache cleared");
       closePanel();
     });
     if (isDeveloperMode()) {
@@ -3402,7 +3575,7 @@ function renderHistoryPanel(favoritesOnly) {
 
   els.panelBody.querySelectorAll(".history-item").forEach(btn => {
     btn.addEventListener("click", e => {
-      const id = Number(btn.dataset.id);
+      const id = btn.dataset.id;
       const action = e.target.closest("[data-action]")?.dataset.action || "open";
       if (action === "delete") {
         deleteReport(id);

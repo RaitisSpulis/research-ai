@@ -1,5 +1,5 @@
 const crypto = require("crypto");
-const { markUserPro } = require("./_auth");
+const { markUserFree, markUserPro } = require("./_auth");
 const { sendError, sendOk } = require("./_responses");
 
 const SIGNATURE_TOLERANCE_SECONDS = 300;
@@ -95,6 +95,24 @@ function getClerkUserIdFromSession(session) {
   );
 }
 
+function getClerkUserIdFromSubscription(subscription) {
+  return (
+    subscription?.metadata?.clerkUserId ||
+    subscription?.metadata?.clerk_user_id ||
+    ""
+  );
+}
+
+function getClerkUserIdFromInvoice(invoice) {
+  return (
+    invoice?.subscription_details?.metadata?.clerkUserId ||
+    invoice?.subscription_details?.metadata?.clerk_user_id ||
+    invoice?.metadata?.clerkUserId ||
+    invoice?.metadata?.clerk_user_id ||
+    ""
+  );
+}
+
 async function handleCheckoutCompleted(session) {
   console.log("[Stripe webhook] checkout.session.completed");
   const userId = getClerkUserIdFromSession(session);
@@ -111,6 +129,37 @@ async function handleCheckoutCompleted(session) {
     checkoutSessionId: session.id || ""
   });
   console.log("[Stripe webhook] Clerk user marked Pro", userId);
+}
+
+async function handleSubscriptionInactive(subscription, status) {
+  const userId = getClerkUserIdFromSubscription(subscription);
+  if (!userId) {
+    console.log("[Stripe webhook] no Clerk user id on subscription", subscription?.id || "");
+    return;
+  }
+
+  await markUserFree(userId, {
+    customerId: subscription.customer || "",
+    subscriptionId: subscription.id || "",
+    status
+  });
+  console.log("[Stripe webhook] Clerk user marked Free", userId);
+}
+
+async function handleInvoicePaymentFailed(invoice) {
+  const userId = getClerkUserIdFromInvoice(invoice);
+  if (!userId) {
+    console.log("[Stripe webhook] no Clerk user id on failed invoice", invoice?.id || "");
+    return;
+  }
+
+  const subscription = invoice?.subscription;
+  await markUserFree(userId, {
+    customerId: invoice?.customer || "",
+    subscriptionId: typeof subscription === "string" ? subscription : subscription?.id || "",
+    status: "past_due"
+  });
+  console.log("[Stripe webhook] Clerk user marked Free", userId);
 }
 
 async function handler(request, response) {
@@ -157,10 +206,20 @@ async function handler(request, response) {
     if (event.type === "checkout.session.completed") {
       await handleCheckoutCompleted(event.data?.object);
     }
+    if (event.type === "customer.subscription.deleted") {
+      await handleSubscriptionInactive(event.data?.object, "canceled");
+    }
+    if (event.type === "invoice.payment_failed") {
+      await handleInvoicePaymentFailed(event.data?.object);
+    }
 
     sendOk(response, {
       received: true,
-      handled: event.type === "checkout.session.completed"
+      handled: [
+        "checkout.session.completed",
+        "customer.subscription.deleted",
+        "invoice.payment_failed"
+      ].includes(event.type)
     });
   } catch (error) {
     console.error("[ResearchAI] Stripe webhook failed:", error);
@@ -177,6 +236,8 @@ module.exports.config = {
 module.exports._test = {
   constructStripeEvent,
   getRawBody,
+  getClerkUserIdFromInvoice,
+  getClerkUserIdFromSubscription,
   verifyStripeSignature,
   getClerkUserIdFromSession
 };

@@ -12,6 +12,7 @@ Set these values in Vercel Project Settings before testing checkout:
 - `CLERK_PUBLISHABLE_KEY`: Clerk publishable key for frontend authentication. Preferred name for Vercel production.
 - `VITE_CLERK_PUBLISHABLE_KEY`: Optional fallback name if you already use Vite-style env naming.
 - `CLERK_SECRET_KEY`: Clerk backend secret key for webhook activation.
+- `CLERK_JWT_ISSUER`: Optional explicit Clerk issuer URL for server-side session token verification. If omitted, ResearchAI derives the issuer from `CLERK_PUBLISHABLE_KEY`.
 - `STRIPE_WEBHOOK_SECRET`: Stripe webhook signing secret.
 
 Do not add secret keys to frontend code, Git, or public documentation. Clerk publishable keys are safe to expose; Clerk secret keys are not.
@@ -32,6 +33,7 @@ Current frontend auth behavior:
 - signed-out users are asked to sign in before upgrading
 - signed-in users can start Stripe Checkout
 - Clerk user id and email are sent to `/api/create-checkout-session`
+- live Gemini generation requires a verified Clerk session token and falls back safely when unavailable
 - Pro is activated after Stripe sends a verified `checkout.session.completed` webhook
 
 ## Creating the Stripe Product and Price
@@ -48,7 +50,7 @@ The frontend calls:
 
 `POST /api/create-checkout-session`
 
-with:
+with a Clerk session token in the `Authorization: Bearer <token>` header and:
 
 ```json
 {
@@ -86,6 +88,8 @@ Create a Stripe webhook endpoint pointing to:
 Subscribe to:
 
 - `checkout.session.completed`
+- `customer.subscription.deleted`
+- `invoice.payment_failed`
 
 After creating the endpoint, copy the signing secret into:
 
@@ -107,7 +111,7 @@ The checkout session stores:
 
 ## Current Limitation
 
-This sprint includes frontend Clerk authentication and webhook-based Pro activation. It does not yet include server-side Clerk token verification for every API request or a separate subscription database.
+This sprint includes frontend Clerk authentication, server-side Clerk token verification for checkout and live Gemini generation, and webhook-based Pro activation. It does not yet include a separate subscription database.
 
 After a successful checkout, ResearchAI shows:
 
@@ -119,7 +123,6 @@ The user becomes Pro after Stripe delivers the verified webhook and Clerk metada
 
 The next production milestone should add:
 
-- server-side Clerk token verification for protected API routes
 - customer and subscription persistence
 - subscription status checks in the frontend
 - Pro limit enforcement based on server-side subscription state
