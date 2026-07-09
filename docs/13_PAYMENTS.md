@@ -9,7 +9,8 @@ Set these values in Vercel Project Settings before testing checkout:
 - `STRIPE_SECRET_KEY`: Stripe secret key for the account.
 - `STRIPE_PRO_PRICE_ID`: Recurring Price ID for the ResearchAI Pro plan.
 - `SITE_URL`: Public site URL, for example `https://researchai.app`.
-- `CLERK_PUBLISHABLE_KEY`: Clerk publishable key for frontend authentication.
+- `CLERK_PUBLISHABLE_KEY`: Clerk publishable key for frontend authentication. Preferred name for Vercel production.
+- `VITE_CLERK_PUBLISHABLE_KEY`: Optional fallback name if you already use Vite-style env naming.
 - `CLERK_SECRET_KEY`: Clerk backend secret key for webhook activation.
 - `STRIPE_WEBHOOK_SECRET`: Stripe webhook signing secret.
 
@@ -20,8 +21,10 @@ Do not add secret keys to frontend code, Git, or public documentation. Clerk pub
 1. Create a Clerk application.
 2. Enable Email authentication.
 3. Copy the publishable key.
-4. Provide the key to the frontend through the `clerk-publishable-key` meta tag or a small runtime config script that sets `window.RESEARCHAI_CLERK_PUBLISHABLE_KEY`.
-5. Do not place `CLERK_SECRET_KEY` in frontend code.
+4. In Vercel, set `CLERK_PUBLISHABLE_KEY` for Production, Preview, and Development as needed.
+5. ResearchAI exposes this public value to the browser through `GET /api/public-config`.
+6. The frontend also supports a `clerk-publishable-key` meta tag or `window.RESEARCHAI_CLERK_PUBLISHABLE_KEY` for local/manual testing.
+7. Do not place `CLERK_SECRET_KEY` in frontend code.
 
 Current frontend auth behavior:
 

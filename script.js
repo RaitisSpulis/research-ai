@@ -35,6 +35,7 @@ const researchAIConfig = {
   api: {
     generateEndpoint: "/api/generate",
     checkoutEndpoint: "/api/create-checkout-session",
+    publicConfigEndpoint: "/api/public-config",
     timeoutMs: 30000
   },
   providers: {
@@ -129,9 +130,38 @@ function getClerkPublishableKey() {
   return (
     researchAIConfig.clerkPublishableKey ||
     window.RESEARCHAI_CLERK_PUBLISHABLE_KEY ||
+    window.CLERK_PUBLISHABLE_KEY ||
+    window.VITE_CLERK_PUBLISHABLE_KEY ||
     document.querySelector("meta[name='clerk-publishable-key']")?.content ||
     ""
   ).trim();
+}
+
+async function fetchPublicConfig() {
+  try {
+    const response = await fetch(researchAIConfig.api.publicConfigEndpoint, {
+      method: "GET",
+      headers: { Accept: "application/json" }
+    });
+    const payload = await response.json().catch(() => null);
+    if (!response.ok || payload?.ok === false) return {};
+    return payload || {};
+  } catch (error) {
+    console.warn("[ResearchAI] public config unavailable:", error);
+    return {};
+  }
+}
+
+async function resolveClerkPublishableKey() {
+  const localKey = getClerkPublishableKey();
+  if (localKey) return localKey;
+
+  const config = await fetchPublicConfig();
+  const remoteKey = (config.clerkPublishableKey || config.CLERK_PUBLISHABLE_KEY || config.VITE_CLERK_PUBLISHABLE_KEY || "").trim();
+  if (remoteKey) {
+    researchAIConfig.clerkPublishableKey = remoteKey;
+  }
+  return remoteKey;
 }
 
 function getPrimaryEmail(user) {
@@ -222,7 +252,7 @@ function waitForClerkConstructor(attempt = 0) {
 }
 
 async function initAuth() {
-  const publishableKey = getClerkPublishableKey();
+  const publishableKey = await resolveClerkPublishableKey();
   authState.configured = Boolean(publishableKey);
   updateAuthUI();
 
