@@ -63,6 +63,18 @@ function testStripeWebhookSignature() {
   assert.strictEqual(timing.cancelAtPeriodEnd, true);
   assert.strictEqual(timing.currentPeriodEnd, "2026-08-09T00:00:00.000Z");
   assert.strictEqual(timing.currentPeriodEndPath, "items.data[].current_period_end");
+
+  const cancelAtTiming = getSubscriptionTiming({
+    status: "active",
+    cancel_at_period_end: false,
+    cancel_at: 1786233600,
+    items: {
+      data: [{ current_period_end: 1786233600 }]
+    }
+  });
+  assert.strictEqual(cancelAtTiming.cancelAtPeriodEnd, true);
+  assert.strictEqual(cancelAtTiming.currentPeriodEnd, "2026-08-09T00:00:00.000Z");
+  assert.strictEqual(cancelAtTiming.currentPeriodEndPath, "cancel_at");
 }
 
 async function testSupabaseUsageAndOwnershipQueries() {
@@ -173,7 +185,8 @@ async function testSubscriptionUpdatedCancellationLookup() {
       id: "sub_missing",
       customer: "cus_lookup",
       status: "active",
-      cancel_at_period_end: true,
+      cancel_at_period_end: false,
+      cancel_at: 1786233600,
       items: {
         data: [{ current_period_end: 1786233600 }]
       },

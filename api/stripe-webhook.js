@@ -121,7 +121,7 @@ function getSubscriptionPlan(status) {
 }
 
 function getSubscriptionSyncStatus(subscription = {}) {
-  if (subscription.cancel_at_period_end === true) {
+  if (isSubscriptionScheduledToCancel(subscription)) {
     return {
       plan: "pro",
       status: "cancelling"
@@ -141,7 +141,21 @@ function unixTimestampToIso(value) {
   return new Date(seconds * 1000).toISOString();
 }
 
+function isSubscriptionScheduledToCancel(subscription = {}) {
+  return Boolean(
+    subscription.cancel_at_period_end === true ||
+    (subscription.cancel_at && (subscription.status === "active" || subscription.status === "trialing"))
+  );
+}
+
 function getStripeTimestampWithPath(subscription = {}) {
+  if (subscription.cancel_at) {
+    return {
+      value: subscription.cancel_at,
+      path: "cancel_at"
+    };
+  }
+
   if (subscription.current_period_end) {
     return {
       value: subscription.current_period_end,
@@ -176,9 +190,23 @@ function getStripeTimestampWithPath(subscription = {}) {
 function getSubscriptionTiming(subscription = {}) {
   const periodEnd = getStripeTimestampWithPath(subscription);
   return {
-    cancelAtPeriodEnd: Boolean(subscription.cancel_at_period_end),
+    cancelAtPeriodEnd: isSubscriptionScheduledToCancel(subscription),
     currentPeriodEnd: unixTimestampToIso(periodEnd.value),
     currentPeriodEndPath: periodEnd.path
+  };
+}
+
+function getSafeFirstSubscriptionItem(subscription = {}) {
+  const item = subscription?.items?.data?.[0];
+  if (!item) return null;
+  return {
+    id: item.id || null,
+    object: item.object || null,
+    current_period_start: item.current_period_start || null,
+    current_period_end: item.current_period_end || null,
+    subscription: item.subscription || null,
+    price: item.price?.id || null,
+    plan: item.plan?.id || null
   };
 }
 
@@ -307,15 +335,20 @@ async function handleCheckoutCompleted(session) {
   });
 }
 
-async function handleSubscriptionUpdated(subscription, eventId = "") {
+async function handleSubscriptionUpdated(subscription, eventId = "", eventApiVersion = "") {
+  console.log("[Subscription updated] event api_version", eventApiVersion || null);
   console.log("[Subscription updated] event id", eventId || null);
+  console.log("[Subscription updated] object keys", Object.keys(subscription || {}));
   console.log("[Subscription updated] subscription id", subscription?.id || null);
   console.log("[Subscription updated] customer id", subscription?.customer || null);
   console.log("[Subscription updated] status", subscription?.status || null);
   console.log("[Subscription updated] cancel_at_period_end value", subscription?.cancel_at_period_end);
   console.log("[Subscription updated] cancel_at_period_end typeof", typeof subscription?.cancel_at_period_end);
+  console.log("[Subscription updated] cancel_at", subscription?.cancel_at || null);
+  console.log("[Subscription updated] canceled_at", subscription?.canceled_at || null);
   console.log("[Subscription updated] subscription.current_period_end", subscription?.current_period_end || null);
   console.log("[Subscription updated] subscription.items.data.length", Array.isArray(subscription?.items?.data) ? subscription.items.data.length : null);
+  console.log("[Subscription updated] first item", getSafeFirstSubscriptionItem(subscription));
   console.log("[Subscription updated] first item current_period_end", subscription?.items?.data?.[0]?.current_period_end || null);
   const timing = getSubscriptionTiming(subscription);
   console.log("[Subscription updated] current_period_end", timing.currentPeriodEnd || null);
@@ -422,7 +455,7 @@ async function handler(request, response) {
       await handleCheckoutCompleted(event.data?.object);
     }
     if (event.type === "customer.subscription.updated") {
-      await handleSubscriptionUpdated(event.data?.object, event.id || "");
+      await handleSubscriptionUpdated(event.data?.object, event.id || "", event.api_version || "");
     }
     if (event.type === "customer.subscription.deleted") {
       await handleSubscriptionInactive(event.data?.object, "canceled");
@@ -461,6 +494,8 @@ module.exports._test = {
   getSubscriptionSyncStatus,
   getSubscriptionTiming,
   getStripeTimestampWithPath,
+  getSafeFirstSubscriptionItem,
+  isSubscriptionScheduledToCancel,
   getSubscriptionUpdatePayload,
   handleSubscriptionUpdated,
   resolveUserIdForSubscription,
