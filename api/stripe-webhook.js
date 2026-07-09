@@ -1,7 +1,7 @@
 const crypto = require("crypto");
 const { markUserFree, markUserPro } = require("./_auth");
 const { sendError, sendOk } = require("./_responses");
-const { updateUserPlan } = require("./_supabase");
+const { getUserByStripeCustomerId, getUserByStripeSubscriptionId, updateUserPlan } = require("./_supabase");
 
 const SIGNATURE_TOLERANCE_SECONDS = 300;
 
@@ -120,6 +120,21 @@ function getSubscriptionPlan(status) {
   return "free";
 }
 
+function getSubscriptionSyncStatus(subscription = {}) {
+  if (subscription.cancel_at_period_end === true) {
+    return {
+      plan: "pro",
+      status: "cancelling"
+    };
+  }
+
+  const plan = getSubscriptionPlan(subscription?.status || "");
+  return {
+    plan,
+    status: subscription?.status || plan
+  };
+}
+
 function unixTimestampToIso(value) {
   const seconds = Number(value || 0);
   if (!Number.isFinite(seconds) || seconds <= 0) return null;
@@ -130,6 +145,43 @@ function getSubscriptionTiming(subscription = {}) {
   return {
     cancelAtPeriodEnd: Boolean(subscription.cancel_at_period_end),
     currentPeriodEnd: unixTimestampToIso(subscription.current_period_end)
+  };
+}
+
+async function resolveUserIdForSubscription(subscription = {}) {
+  const metadataUserId = getClerkUserIdFromSubscription(subscription);
+  if (metadataUserId) {
+    return {
+      userId: metadataUserId,
+      source: "subscription.metadata"
+    };
+  }
+
+  const subscriptionId = subscription?.id || "";
+  if (subscriptionId) {
+    const user = await getUserByStripeSubscriptionId(subscriptionId);
+    if (user?.clerk_user_id) {
+      return {
+        userId: user.clerk_user_id,
+        source: "supabase.stripe_subscription_id"
+      };
+    }
+  }
+
+  const customerId = subscription?.customer || "";
+  if (customerId) {
+    const user = await getUserByStripeCustomerId(customerId);
+    if (user?.clerk_user_id) {
+      return {
+        userId: user.clerk_user_id,
+        source: "supabase.stripe_customer_id"
+      };
+    }
+  }
+
+  return {
+    userId: "",
+    source: "none"
   };
 }
 
@@ -173,20 +225,30 @@ async function handleCheckoutCompleted(session) {
 }
 
 async function handleSubscriptionUpdated(subscription) {
-  const userId = getClerkUserIdFromSubscription(subscription);
+  console.log("[Subscription updated] subscription id", subscription?.id || null);
+  console.log("[Subscription updated] customer id", subscription?.customer || null);
+  console.log("[Subscription updated] status", subscription?.status || null);
+  console.log("[Subscription updated] cancel_at_period_end", Boolean(subscription?.cancel_at_period_end));
+  console.log("[Subscription updated] current_period_end", subscription?.current_period_end || null);
+
+  const resolved = await resolveUserIdForSubscription(subscription);
+  const userId = resolved.userId;
+  console.log("[Subscription updated] matched user source", resolved.source);
+
   if (!userId) {
     console.log("[Subscription sync] no Clerk user id found");
     return;
   }
 
-  const plan = getSubscriptionPlan(subscription?.status || "");
+  const syncStatus = getSubscriptionSyncStatus(subscription);
   const timing = getSubscriptionTiming(subscription);
-  await syncSubscriptionToClerkAndSupabase(userId, plan, {
+  await syncSubscriptionToClerkAndSupabase(userId, syncStatus.plan, {
     customerId: subscription?.customer || "",
     subscriptionId: subscription?.id || "",
-    status: subscription?.status || plan,
+    status: syncStatus.status,
     ...timing
   });
+  console.log("[Subscription updated] Supabase update success", userId);
 }
 
 async function handleSubscriptionInactive(subscription, status) {
@@ -304,8 +366,10 @@ module.exports._test = {
   getClerkUserIdFromInvoice,
   getClerkUserIdFromSubscription,
   getSubscriptionPlan,
+  getSubscriptionSyncStatus,
   getSubscriptionTiming,
   handleSubscriptionUpdated,
+  resolveUserIdForSubscription,
   unixTimestampToIso,
   verifyStripeSignature,
   getClerkUserIdFromSession

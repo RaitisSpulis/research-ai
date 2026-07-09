@@ -98,6 +98,22 @@ async function getUserByClerkId(userId) {
   return Array.isArray(rows) && rows[0] ? rows[0] : null;
 }
 
+async function getUserByStripeSubscriptionId(subscriptionId) {
+  if (!subscriptionId) return null;
+  const rows = await supabaseRequest(
+    `/rest/v1/users?stripe_subscription_id=eq.${encodeURIComponent(subscriptionId)}&select=*`
+  );
+  return Array.isArray(rows) && rows[0] ? rows[0] : null;
+}
+
+async function getUserByStripeCustomerId(customerId) {
+  if (!customerId) return null;
+  const rows = await supabaseRequest(
+    `/rest/v1/users?stripe_customer_id=eq.${encodeURIComponent(customerId)}&select=*`
+  );
+  return Array.isArray(rows) && rows[0] ? rows[0] : null;
+}
+
 async function updateUserPlan(userId, plan, subscription = {}) {
   if (!userId) {
     const error = new Error("Clerk user id is required.");
@@ -297,7 +313,9 @@ module.exports = {
   assertUsageAvailable,
   deleteReport,
   getMonthKey,
+  getUserByStripeCustomerId,
   getUserByClerkId,
+  getUserByStripeSubscriptionId,
   getUsage,
   incrementUsage,
   isProClerkUser,

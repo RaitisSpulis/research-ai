@@ -98,6 +98,98 @@ async function testSupabaseUsageAndOwnershipQueries() {
   }
 }
 
+async function testSubscriptionUpdatedCancellationLookup() {
+  const { handleSubscriptionUpdated } = require("../api/stripe-webhook")._test;
+  process.env.SUPABASE_URL = "https://supabase.test";
+  process.env.SUPABASE_SERVICE_ROLE_KEY = "service_role_test";
+  process.env.CLERK_SECRET_KEY = "clerk_secret_test";
+
+  const originalFetch = global.fetch;
+  const calls = [];
+  global.fetch = async (url, options = {}) => {
+    const requestUrl = String(url);
+    calls.push({ url: requestUrl, options });
+
+    if (requestUrl.startsWith("https://api.clerk.com")) {
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({ id: "user_from_clerk" })
+      };
+    }
+
+    if (requestUrl.includes("stripe_subscription_id=eq.sub_lookup")) {
+      return {
+        ok: true,
+        status: 200,
+        text: async () => JSON.stringify([{ clerk_user_id: "user_by_subscription" }])
+      };
+    }
+
+    if (requestUrl.includes("stripe_subscription_id=eq.sub_missing")) {
+      return {
+        ok: true,
+        status: 200,
+        text: async () => "[]"
+      };
+    }
+
+    if (requestUrl.includes("stripe_customer_id=eq.cus_lookup")) {
+      return {
+        ok: true,
+        status: 200,
+        text: async () => JSON.stringify([{ clerk_user_id: "user_by_customer" }])
+      };
+    }
+
+    if (requestUrl.includes("/rest/v1/users?on_conflict=clerk_user_id")) {
+      const body = JSON.parse(options.body);
+      return {
+        ok: true,
+        status: 200,
+        text: async () => JSON.stringify(body)
+      };
+    }
+
+    return { ok: true, status: 200, text: async () => "[]" };
+  };
+
+  try {
+    await handleSubscriptionUpdated({
+      id: "sub_lookup",
+      customer: "cus_any",
+      status: "active",
+      cancel_at_period_end: true,
+      current_period_end: 1786233600,
+      metadata: {}
+    });
+
+    await handleSubscriptionUpdated({
+      id: "sub_missing",
+      customer: "cus_lookup",
+      status: "active",
+      cancel_at_period_end: true,
+      current_period_end: 1786233600,
+      metadata: {}
+    });
+
+    const supabaseUpdates = calls
+      .filter(call => call.url.includes("/rest/v1/users?on_conflict=clerk_user_id"))
+      .map(call => JSON.parse(call.options.body)[0]);
+
+    assert(supabaseUpdates.some(update => update.clerk_user_id === "user_by_subscription"));
+    assert(supabaseUpdates.some(update => update.clerk_user_id === "user_by_customer"));
+    supabaseUpdates.forEach(update => {
+      assert.strictEqual(update.plan, "pro");
+      assert.strictEqual(update.subscription_status, "cancelling");
+      assert.strictEqual(update.cancel_at_period_end, true);
+      assert.strictEqual(update.current_period_end, "2026-08-09T00:00:00.000Z");
+    });
+  } finally {
+    global.fetch = originalFetch;
+  }
+}
+
 async function testGenerateAuthAndDemoFlow() {
   const handler = require("../api/generate");
   const originalFetch = global.fetch;
@@ -142,6 +234,7 @@ async function main() {
   await testClerkTokenBasics();
   testStripeWebhookSignature();
   await testSupabaseUsageAndOwnershipQueries();
+  await testSubscriptionUpdatedCancellationLookup();
   await testGenerateAuthAndDemoFlow();
   testFrontendStaticSmoke();
   console.log("beta QA mocks passed");

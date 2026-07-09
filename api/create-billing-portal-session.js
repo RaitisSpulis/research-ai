@@ -38,7 +38,7 @@ function isProSupabaseUser(user) {
 }
 
 function hasManageableSubscriptionStatus(status) {
-  return ["active", "trialing", "past_due", "unpaid"].includes(String(status || ""));
+  return ["active", "trialing", "cancelling", "past_due", "unpaid"].includes(String(status || ""));
 }
 
 async function resolveBillingCustomer(clerkUser) {
