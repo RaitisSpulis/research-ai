@@ -243,11 +243,11 @@ function updateProUpgradeUI() {
   }
 }
 
-function waitForClerkConstructor(attempt = 0) {
+function waitForClerk(attempt = 0) {
   if (window.Clerk) return Promise.resolve(window.Clerk);
   if (attempt >= 20) return Promise.resolve(null);
   return new Promise(resolve => {
-    setTimeout(() => resolve(waitForClerkConstructor(attempt + 1)), 150);
+    setTimeout(() => resolve(waitForClerk(attempt + 1)), 150);
   });
 }
 
@@ -273,11 +273,11 @@ async function initAuth() {
   }
 
   try {
-    const ClerkConstructor = await waitForClerkConstructor();
-    if (!ClerkConstructor) throw new Error("ClerkJS did not load.");
+    const clerk = await waitForClerk();
+    if (!clerk) throw new Error("ClerkJS did not load.");
 
-    const clerk = new ClerkConstructor(publishableKey);
-    await clerk.load();
+    console.log("[ResearchAI] Clerk key prefix", publishableKey.slice(0, 8));
+    await clerk.load({ publishableKey });
 
     authState.clerk = clerk;
     authState.ready = true;
