@@ -243,11 +243,25 @@ function updateProUpgradeUI() {
   }
 }
 
-function waitForClerk(attempt = 0) {
+function loadClerkScript() {
   if (window.Clerk) return Promise.resolve(window.Clerk);
-  if (attempt >= 20) return Promise.resolve(null);
-  return new Promise(resolve => {
-    setTimeout(() => resolve(waitForClerk(attempt + 1)), 150);
+
+  return new Promise((resolve, reject) => {
+    const existingScript = document.querySelector("script[data-researchai-clerk]");
+    if (existingScript) {
+      existingScript.addEventListener("load", () => resolve(window.Clerk || null), { once: true });
+      existingScript.addEventListener("error", () => reject(new Error("ClerkJS failed to load.")), { once: true });
+      return;
+    }
+
+    const script = document.createElement("script");
+    script.src = "https://cdn.jsdelivr.net/npm/@clerk/clerk-js@latest/dist/clerk.browser.js";
+    script.async = true;
+    script.crossOrigin = "anonymous";
+    script.dataset.researchaiClerk = "true";
+    script.addEventListener("load", () => resolve(window.Clerk || null), { once: true });
+    script.addEventListener("error", () => reject(new Error("ClerkJS failed to load.")), { once: true });
+    document.head.appendChild(script);
   });
 }
 
@@ -273,7 +287,7 @@ async function initAuth() {
   }
 
   try {
-    const clerk = await waitForClerk();
+    const clerk = await loadClerkScript();
     if (!clerk) throw new Error("ClerkJS did not load.");
 
     console.log("[ResearchAI] Clerk key prefix", publishableKey.slice(0, 8));
