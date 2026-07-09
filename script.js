@@ -34,6 +34,7 @@ const researchAIConfig = {
   api: {
     generateEndpoint: "/api/generate",
     checkoutEndpoint: "/api/create-checkout-session",
+    billingPortalEndpoint: "/api/create-billing-portal-session",
     publicConfigEndpoint: "/api/public-config",
     reportsEndpoint: "/api/reports",
     usageEndpoint: "/api/usage",
@@ -208,6 +209,17 @@ function updateAuthStateFromClerk() {
   authState.email = getPrimaryEmail(user);
   if (!authState.signedIn) {
     serverUsageState = null;
+    billingState = {
+      plan: "free",
+      subscriptionStatus: null,
+      stripeCustomerConnected: false
+    };
+  } else if (authState.isPro && billingState.plan !== "pro") {
+    billingState = {
+      ...billingState,
+      plan: "pro",
+      subscriptionStatus: billingState.subscriptionStatus || "active"
+    };
   }
   updateAuthUI();
   updateUsageUI();
@@ -400,6 +412,11 @@ let loadingInterval = null;
 let toastTimer = null;
 let authInitPromise = null;
 let serverUsageState = null;
+let billingState = {
+  plan: "free",
+  subscriptionStatus: null,
+  stripeCustomerConnected: false
+};
 let workspaceSyncPromise = null;
 const authState = {
   ready: false,
@@ -525,6 +542,20 @@ function applyServerUsage(usage) {
   updateUsageUI();
 }
 
+function applyBillingState(billing) {
+  if (!billing || typeof billing !== "object") return;
+  billingState = {
+    plan: billing.plan || (authState.isPro ? "pro" : "free"),
+    subscriptionStatus: billing.subscriptionStatus || billing.subscription_status || null,
+    stripeCustomerConnected: Boolean(billing.stripeCustomerConnected || billing.stripe_customer_id)
+  };
+  if (billingState.plan === "pro" || billingState.subscriptionStatus === "active" || billingState.subscriptionStatus === "trialing") {
+    authState.isPro = true;
+  }
+  updateAuthUI();
+  updateUsageUI();
+}
+
 async function syncWorkspaceFromServer() {
   if (!authState.signedIn || isDeveloperMode()) return;
 
@@ -550,6 +581,7 @@ async function refreshServerUsage() {
   try {
     const payload = await authenticatedApi(researchAIConfig.api.usageEndpoint);
     applyServerUsage(payload.usage);
+    applyBillingState(payload.billing);
     return payload.usage || null;
   } catch (error) {
     console.warn("[ResearchAI] usage sync unavailable:", error);
@@ -3159,9 +3191,17 @@ async function handleCheckoutReturn() {
   const status = getCheckoutStatus();
   if (status === "success") {
     await reloadClerkUser();
+    await refreshServerUsage();
     showToast("Payment received. Pro account activation will be completed after account setup.");
   } else if (status === "cancelled") {
     showToast("Checkout cancelled. You can upgrade to Pro anytime.", "info");
+  }
+
+  const billingStatus = getBillingReturnStatus();
+  if (billingStatus === "returned") {
+    await reloadClerkUser();
+    await refreshServerUsage();
+    showToast("Billing details refreshed.");
   }
 }
 
@@ -3204,6 +3244,53 @@ async function startProCheckout() {
     console.error("[ResearchAI] checkout failed:", error);
     showToast("Checkout is temporarily unavailable. Please try again soon.", "warn");
     setCheckoutLoading(false);
+  }
+}
+
+function getBillingReturnStatus() {
+  try {
+    return new URLSearchParams(window.location.search).get("billing");
+  } catch {
+    return "";
+  }
+}
+
+async function startBillingPortal() {
+  if (!authState.signedIn) {
+    showToast("Sign in to manage billing.", "info");
+    openSignIn();
+    return;
+  }
+
+  if (!isProUser()) {
+    showToast("Billing Portal is available for Pro subscribers.", "info");
+    return;
+  }
+
+  const button = document.getElementById("manageBillingBtn");
+  if (button) {
+    button.disabled = true;
+    button.textContent = "Opening billing...";
+  }
+
+  try {
+    const payload = await authenticatedApi(researchAIConfig.api.billingPortalEndpoint, {
+      method: "POST",
+      body: JSON.stringify({})
+    });
+
+    if (!payload?.url) {
+      throw new Error("Billing Portal URL was not returned.");
+    }
+
+    window.location.href = payload.url;
+  } catch (error) {
+    console.error("[ResearchAI] billing portal failed:", error);
+    showToast(error.message || "Billing Portal is temporarily unavailable.", "warn");
+    if (button) {
+      button.disabled = false;
+      button.textContent = "Manage Subscription";
+    }
   }
 }
 
@@ -3504,6 +3591,53 @@ function cancelLoading() {
 
 /* -- Panels -- */
 
+function formatSubscriptionStatus(status) {
+  if (!status) return isProUser() ? "Active" : "Free";
+  return String(status)
+    .replace(/_/g, " ")
+    .replace(/\b\w/g, character => character.toUpperCase());
+}
+
+function renderBillingSettingsSection() {
+  const plan = isProUser() ? "Pro" : "Free";
+  const status = formatSubscriptionStatus(billingState.subscriptionStatus);
+
+  if (isProUser()) {
+    const renewalText = billingState.subscriptionStatus
+      ? "Renewal and invoice dates are available inside Stripe Billing Portal."
+      : "Renewal details are available inside Stripe Billing Portal.";
+    return `
+      <div class="settings-group billing-settings">
+        <h3>Billing</h3>
+        <div class="billing-row">
+          <span>Current Plan</span>
+          <strong>${escapeHtml(plan)}</strong>
+        </div>
+        <div class="billing-row">
+          <span>Subscription Status</span>
+          <strong>${escapeHtml(status)}</strong>
+        </div>
+        <div class="billing-row">
+          <span>Next Renewal</span>
+          <strong>${escapeHtml(renewalText)}</strong>
+        </div>
+        <button class="accent-btn" type="button" id="manageBillingBtn">Manage Subscription</button>
+        <p>Manage payment method, invoices, billing history and cancellation through Stripe.</p>
+      </div>`;
+  }
+
+  return `
+    <div class="settings-group billing-settings">
+      <h3>Billing</h3>
+      <div class="billing-row">
+        <span>Current Plan</span>
+        <strong>Free</strong>
+      </div>
+      <p>Free includes 5 reports per month. Pro unlocks unlimited reports, priority AI generation, export tools, saved research history and future premium features.</p>
+      <button class="accent-btn" type="button" id="settingsUpgradeBtn">Upgrade to Pro</button>
+    </div>`;
+}
+
 function openPanel(name) {
   const titles = {
     templates: "Research Templates",
@@ -3542,11 +3676,22 @@ function openPanel(name) {
         <button class="ghost-btn" type="button" id="clearHistoryBtn">Clear local cache</button>
         ${resetUsageControl}
       </div>
+      ${renderBillingSettingsSection()}
       <div class="settings-group">
         <h3>About</h3>
         <p>ResearchAI Public Beta. Reports use live AI or local fallback generation. Live source verification is not active yet.</p>
         <p class="settings-version">Version 1.0.0-beta</p>
       </div>`;
+    refreshServerUsage().then(() => {
+      if (els.panelOverlay && !els.panelOverlay.hidden && els.panelTitle.textContent === "Settings") {
+        const billingSection = els.panelBody.querySelector(".billing-settings");
+        if (billingSection) {
+          billingSection.outerHTML = renderBillingSettingsSection();
+          on(document.getElementById("manageBillingBtn"), "click", startBillingPortal);
+          on(document.getElementById("settingsUpgradeBtn"), "click", startProCheckout);
+        }
+      }
+    });
     on(document.getElementById("clearHistoryBtn"), "click", () => {
       localStorage.removeItem(STORAGE_KEY);
       currentReport = null;
@@ -3562,6 +3707,8 @@ function openPanel(name) {
         showToast("Usage counter reset");
       });
     }
+    on(document.getElementById("manageBillingBtn"), "click", startBillingPortal);
+    on(document.getElementById("settingsUpgradeBtn"), "click", startProCheckout);
   }
 
   if (!els.panelOverlay) return;

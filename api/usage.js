@@ -1,6 +1,6 @@
 const { verifyClerkRequest } = require("./_clerk-token");
 const { sendError, sendOk } = require("./_responses");
-const { getUsage, isProClerkUser, upsertUser } = require("./_supabase");
+const { getUserByClerkId, getUsage, isProClerkUser, upsertUser } = require("./_supabase");
 const { rejectDisallowedOrigin } = require("./_security");
 
 function sendSupabaseError(response, error) {
@@ -32,10 +32,16 @@ module.exports = async function handler(request, response) {
 
   try {
     await upsertUser(clerkUser);
+    const user = await getUserByClerkId(clerkUser.sub);
     const usage = await getUsage(clerkUser.sub);
     sendOk(response, {
       usage,
-      pro: isProClerkUser(clerkUser)
+      pro: isProClerkUser(clerkUser) || user?.plan === "pro",
+      billing: {
+        plan: user?.plan || (isProClerkUser(clerkUser) ? "pro" : "free"),
+        subscriptionStatus: user?.subscription_status || null,
+        stripeCustomerConnected: Boolean(user?.stripe_customer_id)
+      }
     });
   } catch (error) {
     sendSupabaseError(response, error);

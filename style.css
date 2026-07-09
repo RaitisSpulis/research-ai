@@ -2365,6 +2365,32 @@ th {
   margin-bottom: 10px;
 }
 
+.billing-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 12px 0;
+  border-bottom: 1px solid rgba(255,255,255,.08);
+}
+
+.billing-row span {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.billing-row strong {
+  max-width: 58%;
+  color: var(--text);
+  font-size: 13px;
+  text-align: right;
+  line-height: 1.45;
+}
+
+.billing-settings .accent-btn {
+  margin: 16px 10px 10px 0;
+}
+
 .settings-version {
   color: var(--soft);
   font-size: 12px;
