@@ -1,4 +1,5 @@
 const { verifyClerkRequest } = require("./_clerk-token");
+const { isUserPro } = require("./_auth");
 const { sendError, sendOk } = require("./_responses");
 const {
   assertUsageAvailable,
@@ -25,7 +26,8 @@ function parseBody(request) {
 async function authenticate(request, response) {
   const clerkUser = await verifyClerkRequest(request);
   if (!clerkUser?.sub) {
-    sendError(response, 401, "unauthorized", "Sign in is required.");
+    console.warn("[ResearchAI reports] Clerk auth_required");
+    sendError(response, 401, "auth_required", "Sign in is required.");
     return null;
   }
 
@@ -35,16 +37,29 @@ async function authenticate(request, response) {
 
 function sendSupabaseError(response, error) {
   if (error.code === "free_limit_reached") {
-    sendError(response, 429, "free_limit_reached", "Free monthly report limit reached.", error.usage);
+    console.warn("[ResearchAI reports] Supabase free_limit_reached");
+    sendError(response, 429, "free_limit_reached", "You used your 5 free reports this month.", error.usage);
     return;
   }
 
   if (error.code === "missing_supabase_configuration") {
-    sendError(response, 500, "missing_supabase_configuration", "Database is not configured.");
+    console.error("[ResearchAI reports] Supabase missing configuration");
+    sendError(response, 500, "database_error", "ResearchAI could not save your report. Please try again.");
     return;
   }
 
-  sendError(response, error.statusCode || 500, error.code || "database_error", "Database request failed.");
+  console.error("[ResearchAI reports] Supabase database_error:", error.code || error.message);
+  sendError(response, 500, "database_error", "ResearchAI could not save your report. Please try again.");
+}
+
+async function resolveProStatus(clerkUser) {
+  if (isProClerkUser(clerkUser)) return true;
+  try {
+    return await isUserPro(clerkUser.sub);
+  } catch (error) {
+    console.warn("[ResearchAI reports] Clerk pro metadata lookup unavailable");
+    return false;
+  }
 }
 
 module.exports = async function handler(request, response) {
@@ -52,7 +67,7 @@ module.exports = async function handler(request, response) {
   if (!clerkUser) return;
 
   const userId = clerkUser.sub;
-  const pro = isProClerkUser(clerkUser);
+  const pro = await resolveProStatus(clerkUser);
 
   try {
     if (request.method === "GET") {

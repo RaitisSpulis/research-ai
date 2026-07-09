@@ -803,6 +803,18 @@ class RateLimited extends AIProviderError {
   }
 }
 
+class FreeLimitReached extends AIProviderError {
+  constructor(message, details) {
+    super("FreeLimitReached", message || "Free report limit reached.", details);
+  }
+}
+
+class DatabaseError extends AIProviderError {
+  constructor(message, details) {
+    super("DatabaseError", message || "Database request failed.", details);
+  }
+}
+
 class Unauthorized extends AIProviderError {
   constructor(message, details) {
     super("Unauthorized", message || "Provider authorization failed.", details);
@@ -836,8 +848,10 @@ class UnknownError extends AIProviderError {
 const generationErrorMessages = {
   ProviderUnavailable: "Live AI is temporarily unavailable. A local sample report can still be created.",
   InvalidConfiguration: "Report generation is not configured correctly. A local sample report can still be created.",
-  RateLimited: "ResearchAI is receiving too many requests right now. Please try again shortly.",
-  Unauthorized: "ResearchAI is not authorized to use this provider yet. A local sample report can still be created.",
+  RateLimited: "The AI provider is busy. Please wait a minute and try again.",
+  FreeLimitReached: "You used your 5 free reports this month. Upgrade to Pro for unlimited reports.",
+  DatabaseError: "ResearchAI could not read your report usage. Please try again.",
+  Unauthorized: "Sign in is required to generate reports.",
   InvalidResponse: "ResearchAI could not read the provider response. Please try again.",
   NetworkError: "ResearchAI could not reach the report provider. Please check your connection and try again.",
   Timeout: "The report provider took too long to respond. Please try again.",
@@ -1049,6 +1063,12 @@ function parseProviderResponse(providerResponse, request) {
 
 function normalizeProviderError(error) {
   if (error instanceof AIProviderError) return error;
+  if (error?.code === "free_limit_reached") return new FreeLimitReached(error.message, error);
+  if (error?.code === "provider_rate_limited" || error?.code === "rate_limited") return new RateLimited(error.message, error);
+  if (error?.code === "provider_unavailable") return new ProviderUnavailable(error.message, error);
+  if (error?.code === "database_error") return new DatabaseError(error.message, error);
+  if (error?.code === "auth_required" || error?.code === "unauthorized") return new Unauthorized(error.message, error);
+  if (error?.code === "internal_error") return new UnknownError(error.message, error);
   if (error?.name === "AbortError") return new Timeout(error.message, error);
   if (/network|fetch/i.test(error?.message || "")) return new NetworkError(error.message, error);
   return new UnknownError(error?.message, error);
@@ -1058,11 +1078,16 @@ function providerErrorFromApi(error, status) {
   const code = error?.code || "";
   const message = error?.message || "Report provider failed.";
 
-  if (status === 401 || code === "unauthorized") return new Unauthorized(message, error);
-  if (status === 429 || code === "rate_limited") return new RateLimited(message, error);
+  if (code === "free_limit_reached") return new FreeLimitReached(message, error);
+  if (code === "provider_rate_limited" || code === "rate_limited") return new RateLimited(message, error);
+  if (code === "provider_unavailable") return new ProviderUnavailable(message, error);
+  if (code === "database_error") return new DatabaseError(message, error);
+  if (status === 401 || code === "auth_required" || code === "unauthorized") return new Unauthorized(message, error);
+  if (status === 429) return new RateLimited(message, error);
   if (code === "timeout") return new Timeout(message, error);
   if (code === "invalid_response") return new InvalidResponse(message, error);
   if (code === "invalid_request" || code === "invalid_provider") return new InvalidConfiguration(message, error);
+  if (code === "internal_error") return new UnknownError(message, error);
   return new UnknownError(message, error);
 }
 
@@ -1167,7 +1192,7 @@ class AIService {
       return parseProviderResponse(rawResponse, request);
     } catch (err) {
       const normalized = normalizeProviderError(err);
-      if (normalized.type === "RateLimited" || normalized.type === "Unauthorized") {
+      if (["FreeLimitReached", "DatabaseError", "RateLimited", "Unauthorized"].includes(normalized.type)) {
         throw normalized;
       }
       if (request.mode !== "demo") {

@@ -2,6 +2,7 @@ const { getProvider, ProviderError } = require("./_providers");
 const { sendError, sendOk } = require("./_responses");
 const { verifyClerkRequest } = require("./_clerk-token");
 const { assertUsageAvailable, incrementUsage, isProClerkUser, upsertUser } = require("./_supabase");
+const { isUserPro } = require("./_auth");
 
 const MAX_PROMPT_LENGTH = 500;
 
@@ -58,25 +59,52 @@ function createGenerateRequest(body, mode) {
 
 function sendProviderError(response, error) {
   if (error instanceof ProviderError) {
-    sendError(response, error.statusCode, error.code, error.message);
+    if (error.code === "rate_limited") {
+      console.warn("[ResearchAI generate] Gemini provider_rate_limited");
+      sendError(response, 503, "provider_rate_limited", "The AI provider is busy. Please wait a minute and try again.");
+      return;
+    }
+
+    if (error.code === "unauthorized") {
+      console.warn("[ResearchAI generate] Gemini provider_unavailable authorization");
+      sendError(response, 503, "provider_unavailable", "The AI provider is temporarily unavailable.");
+      return;
+    }
+
+    console.warn("[ResearchAI generate] Gemini provider_unavailable", error.code || "provider_error");
+    sendError(response, error.statusCode || 503, "provider_unavailable", "The AI provider is temporarily unavailable.");
     return;
   }
 
-  sendError(response, 500, "provider_error", "The report provider could not complete the request.");
+  console.error("[ResearchAI generate] internal app logic provider error:", error);
+  sendError(response, 500, "internal_error", "ResearchAI could not generate the report.");
 }
 
 function sendDatabaseError(response, error) {
   if (error.code === "free_limit_reached") {
-    sendError(response, 429, "free_limit_reached", "Free monthly report limit reached.", error.usage);
+    console.warn("[ResearchAI generate] Supabase free_limit_reached");
+    sendError(response, 429, "free_limit_reached", "You used your 5 free reports this month.", error.usage);
     return;
   }
 
   if (error.code === "missing_supabase_configuration") {
-    sendError(response, 500, "missing_supabase_configuration", "Database is not configured.");
+    console.error("[ResearchAI generate] Supabase missing configuration");
+    sendError(response, 500, "database_error", "ResearchAI could not read your report usage. Please try again.");
     return;
   }
 
-  sendError(response, error.statusCode || 500, error.code || "database_error", "Database request failed.");
+  console.error("[ResearchAI generate] Supabase database_error:", error.code || error.message);
+  sendError(response, 500, "database_error", "ResearchAI could not read your report usage. Please try again.");
+}
+
+async function resolveProStatus(clerkUser) {
+  if (isProClerkUser(clerkUser)) return true;
+  try {
+    return await isUserPro(clerkUser.sub);
+  } catch (error) {
+    console.warn("[ResearchAI generate] Clerk pro metadata lookup unavailable");
+    return false;
+  }
 }
 
 module.exports = async function handler(request, response) {
@@ -89,6 +117,7 @@ module.exports = async function handler(request, response) {
   const body = parseBody(request);
   const validationError = validateGenerateRequest(body);
   if (validationError) {
+    console.warn("[ResearchAI generate] internal app logic invalid_request");
     sendError(response, 400, "invalid_request", validationError);
     return;
   }
@@ -96,19 +125,29 @@ module.exports = async function handler(request, response) {
   const mode = body.mode || "demo";
   const provider = getProvider(mode);
   if (!provider) {
+    console.warn("[ResearchAI generate] internal app logic invalid_provider", mode);
     sendError(response, 400, "invalid_provider", `Unknown generation mode: ${mode}`);
     return;
   }
 
   if (mode === "gemini") {
-    const clerkUser = await verifyClerkRequest(request);
+    let clerkUser = null;
+    try {
+      clerkUser = await verifyClerkRequest(request);
+    } catch (error) {
+      console.warn("[ResearchAI generate] Clerk auth_required verification failed");
+      sendError(response, 401, "auth_required", "Sign in is required to generate reports.");
+      return;
+    }
+
     if (!clerkUser?.sub) {
-      sendError(response, 401, "unauthorized", "Sign in is required for live AI generation.");
+      console.warn("[ResearchAI generate] Clerk auth_required");
+      sendError(response, 401, "auth_required", "Sign in is required to generate reports.");
       return;
     }
 
     try {
-      const pro = isProClerkUser(clerkUser);
+      const pro = await resolveProStatus(clerkUser);
       await upsertUser(clerkUser);
       await assertUsageAvailable(clerkUser.sub, pro);
       const report = await provider.generate(createGenerateRequest(body, mode));
@@ -132,6 +171,7 @@ module.exports = async function handler(request, response) {
   }
 
   if (mode !== "demo") {
+    console.warn("[ResearchAI generate] internal app logic provider_unavailable", mode);
     sendError(response, 500, "provider_unavailable", `${provider.name} is not connected yet.`);
     return;
   }
