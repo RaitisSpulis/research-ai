@@ -5,6 +5,7 @@ const {
   assertUsageAvailable,
   deleteReport,
   getUsage,
+  getUserByClerkId,
   incrementUsage,
   isProClerkUser,
   listReports,
@@ -55,9 +56,16 @@ function sendSupabaseError(response, error) {
 async function resolveProStatus(clerkUser) {
   if (isProClerkUser(clerkUser)) return true;
   try {
-    return await isUserPro(clerkUser.sub);
+    if (await isUserPro(clerkUser.sub)) return true;
   } catch (error) {
     console.warn("[ResearchAI reports] Clerk pro metadata lookup unavailable");
+  }
+
+  try {
+    const user = await getUserByClerkId(clerkUser.sub);
+    return user?.plan === "pro";
+  } catch (error) {
+    console.warn("[ResearchAI reports] Supabase plan lookup unavailable");
     return false;
   }
 }

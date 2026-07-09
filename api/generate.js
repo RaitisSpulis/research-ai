@@ -1,7 +1,7 @@
 const { getProvider, ProviderError } = require("./_providers");
 const { sendError, sendOk } = require("./_responses");
 const { verifyClerkRequest } = require("./_clerk-token");
-const { assertUsageAvailable, incrementUsage, isProClerkUser, upsertUser } = require("./_supabase");
+const { assertUsageAvailable, getUserByClerkId, incrementUsage, isProClerkUser, upsertUser } = require("./_supabase");
 const { isUserPro } = require("./_auth");
 
 const MAX_PROMPT_LENGTH = 500;
@@ -100,9 +100,16 @@ function sendDatabaseError(response, error) {
 async function resolveProStatus(clerkUser) {
   if (isProClerkUser(clerkUser)) return true;
   try {
-    return await isUserPro(clerkUser.sub);
+    if (await isUserPro(clerkUser.sub)) return true;
   } catch (error) {
     console.warn("[ResearchAI generate] Clerk pro metadata lookup unavailable");
+  }
+
+  try {
+    const user = await getUserByClerkId(clerkUser.sub);
+    return user?.plan === "pro";
+  } catch (error) {
+    console.warn("[ResearchAI generate] Supabase plan lookup unavailable");
     return false;
   }
 }

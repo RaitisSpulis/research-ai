@@ -25,6 +25,9 @@ create table if not exists public.users (
   clerk_user_id text primary key,
   email text,
   plan text not null default 'free',
+  subscription_status text,
+  stripe_customer_id text,
+  stripe_subscription_id text,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
@@ -74,6 +77,15 @@ create table if not exists public.saved_reports (
 );
 ```
 
+If the Sprint 14 schema already exists, run this upgrade migration:
+
+```sql
+alter table public.users
+  add column if not exists subscription_status text,
+  add column if not exists stripe_customer_id text,
+  add column if not exists stripe_subscription_id text;
+```
+
 ## Current Flow
 
 1. The frontend gets a Clerk session token.
@@ -85,6 +97,10 @@ create table if not exists public.saved_reports (
 7. `/api/reports` saves the structured report into `reports` and `saved_reports`.
 8. Report history, pinned state, delete actions, and usage refresh from Supabase for signed-in users.
 9. `localStorage` remains only as a browser cache and offline fallback.
+
+Subscription webhooks keep `users.plan`, `users.subscription_status`,
+`users.stripe_customer_id`, and `users.stripe_subscription_id` synchronized with
+Stripe and Clerk metadata.
 
 If live Gemini fails and the browser creates a local fallback report, `/api/reports` enforces and increments usage before saving the fallback report.
 

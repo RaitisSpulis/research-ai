@@ -73,13 +73,13 @@ async function markUserPro(userId, subscription = {}) {
       public_metadata: {
         pro: true,
         plan: "pro",
-        subscriptionStatus: "active",
+        subscriptionStatus: subscription.status || "active",
         proActivatedAt: activatedAt
       },
       private_metadata: {
         pro: true,
         plan: "pro",
-        subscriptionStatus: "active",
+        subscriptionStatus: subscription.status || "active",
         proActivatedAt: activatedAt,
         stripeCustomerId: subscription.customerId || "",
         stripeSubscriptionId: subscription.subscriptionId || "",
@@ -97,20 +97,22 @@ async function markUserFree(userId, subscription = {}) {
   }
 
   const updatedAt = new Date().toISOString();
+  const status = subscription.status || "inactive";
+  const plan = status === "past_due" || status === "unpaid" ? "past_due" : "free";
   console.log("[Clerk] marking user Free", userId);
   return clerkRequest(`/users/${encodeURIComponent(userId)}/metadata`, {
     method: "PATCH",
     body: JSON.stringify({
       public_metadata: {
         pro: false,
-        plan: "free",
-        subscriptionStatus: subscription.status || "inactive",
+        plan,
+        subscriptionStatus: status,
         proDeactivatedAt: updatedAt
       },
       private_metadata: {
         pro: false,
-        plan: "free",
-        subscriptionStatus: subscription.status || "inactive",
+        plan,
+        subscriptionStatus: status,
         proDeactivatedAt: updatedAt,
         stripeCustomerId: subscription.customerId || "",
         stripeSubscriptionId: subscription.subscriptionId || ""

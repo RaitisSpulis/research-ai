@@ -69,16 +69,56 @@ async function upsertUser(clerkUser) {
   }
 
   const email = clerkUser?.email || clerkUser?.email_address || clerkUser?.primary_email_address || "";
-  const plan = isProClerkUser(clerkUser) ? "pro" : "free";
+  const metadataPro = isProClerkUser(clerkUser);
+  const payload = {
+    clerk_user_id: userId,
+    email,
+    updated_at: new Date().toISOString()
+  };
+
+  if (metadataPro) {
+    payload.plan = "pro";
+  }
+
   const [user] = await supabaseRequest("/rest/v1/users?on_conflict=clerk_user_id", {
     method: "POST",
     headers: { Prefer: "resolution=merge-duplicates,return=representation" },
-    body: JSON.stringify([{
-      clerk_user_id: userId,
-      email,
-      plan,
-      updated_at: new Date().toISOString()
-    }])
+    body: JSON.stringify([payload])
+  });
+
+  return user;
+}
+
+async function getUserByClerkId(userId) {
+  if (!userId) return null;
+  const rows = await supabaseRequest(
+    `/rest/v1/users?clerk_user_id=eq.${encodeURIComponent(userId)}&select=*`
+  );
+  return Array.isArray(rows) && rows[0] ? rows[0] : null;
+}
+
+async function updateUserPlan(userId, plan, subscription = {}) {
+  if (!userId) {
+    const error = new Error("Clerk user id is required.");
+    error.code = "missing_user_id";
+    throw error;
+  }
+
+  const payload = {
+    clerk_user_id: userId,
+    plan: plan || "free",
+    updated_at: new Date().toISOString()
+  };
+
+  if (subscription.email) payload.email = subscription.email;
+  if (subscription.customerId !== undefined) payload.stripe_customer_id = subscription.customerId || "";
+  if (subscription.subscriptionId !== undefined) payload.stripe_subscription_id = subscription.subscriptionId || "";
+  if (subscription.status !== undefined) payload.subscription_status = subscription.status || "";
+
+  const [user] = await supabaseRequest("/rest/v1/users?on_conflict=clerk_user_id", {
+    method: "POST",
+    headers: { Prefer: "resolution=merge-duplicates,return=representation" },
+    body: JSON.stringify([payload])
   });
 
   return user;
@@ -254,6 +294,7 @@ module.exports = {
   assertUsageAvailable,
   deleteReport,
   getMonthKey,
+  getUserByClerkId,
   getUsage,
   incrementUsage,
   isProClerkUser,
@@ -261,5 +302,6 @@ module.exports = {
   normalizeUsage,
   saveReport,
   updateReportPin,
+  updateUserPlan,
   upsertUser
 };

@@ -1,6 +1,7 @@
 const crypto = require("crypto");
 const { markUserFree, markUserPro } = require("./_auth");
 const { sendError, sendOk } = require("./_responses");
+const { updateUserPlan } = require("./_supabase");
 
 const SIGNATURE_TOLERANCE_SECONDS = 300;
 
@@ -113,53 +114,90 @@ function getClerkUserIdFromInvoice(invoice) {
   );
 }
 
+function getSubscriptionPlan(status) {
+  if (status === "active" || status === "trialing") return "pro";
+  if (status === "past_due" || status === "unpaid") return "past_due";
+  return "free";
+}
+
+async function syncSubscriptionToClerkAndSupabase(userId, plan, subscription = {}) {
+  if (!userId) {
+    console.log("[Subscription sync] no Clerk user id found");
+    return;
+  }
+
+  if (plan === "pro") {
+    await markUserPro(userId, subscription);
+    console.log("[Subscription sync] Clerk updated", userId);
+  } else {
+    await markUserFree(userId, subscription);
+    console.log("[Subscription sync] Clerk updated", userId);
+  }
+
+  await updateUserPlan(userId, plan, subscription);
+  console.log("[Subscription sync] Supabase plan updated", userId, plan);
+}
+
 async function handleCheckoutCompleted(session) {
   console.log("[Stripe webhook] checkout.session.completed");
   const userId = getClerkUserIdFromSession(session);
   if (!userId) {
-    const error = new Error("Checkout session did not include a Clerk user id.");
-    error.code = "missing_clerk_user";
-    throw error;
+    console.log("[Subscription sync] no Clerk user id found");
+    return;
   }
   console.log("[Stripe webhook] clerk user id found", userId);
 
-  await markUserPro(userId, {
+  await syncSubscriptionToClerkAndSupabase(userId, "pro", {
     customerId: session.customer || "",
     subscriptionId: session.subscription || "",
-    checkoutSessionId: session.id || ""
+    checkoutSessionId: session.id || "",
+    status: "active"
   });
-  console.log("[Stripe webhook] Clerk user marked Pro", userId);
+}
+
+async function handleSubscriptionUpdated(subscription) {
+  const userId = getClerkUserIdFromSubscription(subscription);
+  if (!userId) {
+    console.log("[Subscription sync] no Clerk user id found");
+    return;
+  }
+
+  const plan = getSubscriptionPlan(subscription?.status || "");
+  await syncSubscriptionToClerkAndSupabase(userId, plan, {
+    customerId: subscription?.customer || "",
+    subscriptionId: subscription?.id || "",
+    status: subscription?.status || plan
+  });
 }
 
 async function handleSubscriptionInactive(subscription, status) {
   const userId = getClerkUserIdFromSubscription(subscription);
   if (!userId) {
-    console.log("[Stripe webhook] no Clerk user id on subscription", subscription?.id || "");
+    console.log("[Subscription sync] no Clerk user id found");
     return;
   }
 
-  await markUserFree(userId, {
+  const plan = status === "past_due" || status === "unpaid" ? "past_due" : "free";
+  await syncSubscriptionToClerkAndSupabase(userId, plan, {
     customerId: subscription.customer || "",
     subscriptionId: subscription.id || "",
     status
   });
-  console.log("[Stripe webhook] Clerk user marked Free", userId);
 }
 
 async function handleInvoicePaymentFailed(invoice) {
   const userId = getClerkUserIdFromInvoice(invoice);
   if (!userId) {
-    console.log("[Stripe webhook] no Clerk user id on failed invoice", invoice?.id || "");
+    console.log("[Subscription sync] no Clerk user id found");
     return;
   }
 
   const subscription = invoice?.subscription;
-  await markUserFree(userId, {
+  await syncSubscriptionToClerkAndSupabase(userId, "past_due", {
     customerId: invoice?.customer || "",
     subscriptionId: typeof subscription === "string" ? subscription : subscription?.id || "",
     status: "past_due"
   });
-  console.log("[Stripe webhook] Clerk user marked Free", userId);
 }
 
 async function handler(request, response) {
@@ -206,6 +244,9 @@ async function handler(request, response) {
     if (event.type === "checkout.session.completed") {
       await handleCheckoutCompleted(event.data?.object);
     }
+    if (event.type === "customer.subscription.updated") {
+      await handleSubscriptionUpdated(event.data?.object);
+    }
     if (event.type === "customer.subscription.deleted") {
       await handleSubscriptionInactive(event.data?.object, "canceled");
     }
@@ -217,6 +258,7 @@ async function handler(request, response) {
       received: true,
       handled: [
         "checkout.session.completed",
+        "customer.subscription.updated",
         "customer.subscription.deleted",
         "invoice.payment_failed"
       ].includes(event.type)
@@ -238,6 +280,8 @@ module.exports._test = {
   getRawBody,
   getClerkUserIdFromInvoice,
   getClerkUserIdFromSubscription,
+  getSubscriptionPlan,
+  handleSubscriptionUpdated,
   verifyStripeSignature,
   getClerkUserIdFromSession
 };
