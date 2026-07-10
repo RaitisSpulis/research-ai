@@ -7,10 +7,10 @@ ResearchAI uses Stripe Billing Portal so Pro users can manage their own subscrip
 Set these in Vercel:
 
 ```txt
-STRIPE_SECRET_KEY=sk_live_or_test_...
+STRIPE_SECRET_KEY=<your-stripe-secret-key>
 SITE_URL=https://researchai.app
-CLERK_PUBLISHABLE_KEY=pk_live_or_test_...
-CLERK_SECRET_KEY=sk_live_or_test_...
+CLERK_PUBLISHABLE_KEY=<your-clerk-publishable-key>
+CLERK_SECRET_KEY=<your-clerk-secret-key>
 SUPABASE_URL=https://your-project.supabase.co
 SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
 ```

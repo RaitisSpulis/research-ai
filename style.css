@@ -2562,6 +2562,105 @@ th {
   text-decoration: none;
 }
 
+.case-study-shell {
+  width: min(1040px, calc(100% - 36px));
+}
+
+.case-study-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 28px;
+}
+
+.case-study-actions a,
+.case-study-actions span,
+.case-study-content .accent-btn,
+.case-study-content .ghost-btn {
+  text-decoration: none;
+}
+
+.case-study-disabled {
+  opacity: .72;
+  cursor: not-allowed;
+}
+
+.case-study-grid,
+.screenshot-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+  margin: 22px 0 34px;
+}
+
+.case-study-grid article,
+.screenshot-grid figure {
+  margin: 0;
+  padding: 22px;
+  border-radius: 18px;
+  background: rgba(255,255,255,.045);
+  border: 1px solid rgba(255,255,255,.09);
+}
+
+.case-study-grid h3 {
+  margin: 0 0 12px;
+}
+
+.case-study-grid ul,
+.case-study-content ul {
+  margin: 0 0 22px;
+  padding-left: 20px;
+  color: var(--muted);
+  line-height: 1.75;
+}
+
+.case-study-tags,
+.architecture-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin: 18px 0 32px;
+}
+
+.case-study-tags span,
+.architecture-list span {
+  display: inline-flex;
+  align-items: center;
+  min-height: 36px;
+  padding: 0 13px;
+  border-radius: 999px;
+  color: var(--text);
+  background: rgba(255,255,255,.06);
+  border: 1px solid rgba(255,255,255,.1);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.screenshot-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.screenshot-placeholder {
+  display: grid;
+  place-items: center;
+  min-height: 180px;
+  border-radius: 14px;
+  color: var(--soft);
+  font-weight: 800;
+  text-align: center;
+  background:
+    linear-gradient(145deg, rgba(139,92,246,.16), rgba(34,211,238,.08)),
+    rgba(255,255,255,.035);
+  border: 1px dashed rgba(255,255,255,.18);
+}
+
+.screenshot-grid figcaption {
+  margin-top: 12px;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.55;
+}
+
 .static-footer {
   padding: 26px 0 36px;
   color: var(--soft);
@@ -2717,6 +2816,11 @@ th {
     flex-direction: column;
     align-items: flex-start;
   }
+
+  .case-study-grid,
+  .screenshot-grid {
+    grid-template-columns: 1fr;
+  }
 }
 
 @media (max-width: 560px) {
@@ -2828,6 +2932,15 @@ th {
   .history-actions {
     grid-column: 1 / -1;
     justify-content: flex-start;
+  }
+
+  .case-study-actions {
+    display: grid;
+  }
+
+  .case-study-actions a,
+  .case-study-actions span {
+    justify-content: center;
   }
 
   .report-stats {

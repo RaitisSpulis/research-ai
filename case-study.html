@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="ResearchAI case study: an AI research workspace with authentication, subscriptions, database-backed reports, billing, and production-ready SaaS flows." />
+  <meta name="author" content="ResearchAI" />
+  <meta name="theme-color" content="#05070f" />
+  <meta name="robots" content="index, follow" />
+  <meta property="og:type" content="article" />
+  <meta property="og:title" content="ResearchAI Case Study - AI SaaS Research Workspace" />
+  <meta property="og:description" content="A portfolio case study for ResearchAI, a production-minded AI SaaS research workspace built by Raitis." />
+  <meta property="og:image" content="https://researchai.app/og-case-study.png" />
+  <meta property="og:url" content="https://researchai.app/case-study.html" />
+  <meta property="og:site_name" content="ResearchAI" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="ResearchAI Case Study" />
+  <meta name="twitter:description" content="AI SaaS product case study covering product, architecture, security, billing, and production engineering." />
+  <meta name="twitter:image" content="https://researchai.app/og-case-study.png" />
+  <title>ResearchAI Case Study - AI SaaS Research Workspace</title>
+  <link rel="canonical" href="https://researchai.app/case-study.html" />
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0%25' y1='0%25' x2='100%25' y2='100%25'%3E%3Cstop offset='0%25' stop-color='%238b5cf6'/%3E%3Cstop offset='100%25' stop-color='%2322d3ee'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='32' height='32' rx='8' fill='url(%23g)'/%3E%3Cpath d='M10 22L22 10M12 10h8v8' fill='none' stroke='white' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body class="static-page-body">
+  <a class="skip-link" href="#mainContent">Skip to main content</a>
+  <div class="background-noise" aria-hidden="true"></div>
+  <header class="static-nav">
+    <a class="brand" href="index.html">
+      <span class="brand-mark" aria-hidden="true"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 17L17 7M9 7h8v8" /></svg></span>
+      <span>ResearchAI</span>
+    </a>
+    <nav aria-label="Site">
+      <a href="index.html">Live Demo</a>
+      <a href="about.html">About</a>
+      <a href="contact.html">Contact</a>
+      <a href="privacy.html">Privacy</a>
+      <a href="terms.html">Terms</a>
+    </nav>
+  </header>
+
+  <main class="static-shell case-study-shell" id="mainContent">
+    <section class="static-hero">
+      <p class="eyebrow"><span aria-hidden="true"></span> Portfolio Case Study</p>
+      <h1>ResearchAI - AI SaaS research workspace</h1>
+      <p>ResearchAI turns a user question into a structured professional report with account-based usage, saved history, exports, subscriptions, and production-minded billing flows.</p>
+      <div class="case-study-actions">
+        <a class="accent-btn" href="index.html">Live demo</a>
+        <span class="ghost-btn case-study-disabled" aria-disabled="true">GitHub available on request</span>
+        <a class="ghost-btn" href="contact.html">Contact</a>
+      </div>
+    </section>
+
+    <section class="static-content case-study-content">
+      <h2>Problem</h2>
+      <p>Many AI tools produce open-ended chat responses that are difficult to save, compare, export, or trust as professional work. ResearchAI explores how an AI product can feel more like a structured research workspace than a prompt box.</p>
+
+      <h2>Solution</h2>
+      <p>The product guides users from a research question to a document-style report with executive summary, findings, risks, recommendations, source guidance, confidence notes, saved reports, and export options.</p>
+
+      <div class="case-study-grid">
+        <article>
+          <h3>Target users</h3>
+          <ul>
+            <li>Founders validating startup ideas</li>
+            <li>Freelancers and consultants preparing research drafts</li>
+            <li>Operators comparing tools, markets, or strategies</li>
+            <li>Students and self-directed learners structuring plans</li>
+          </ul>
+        </article>
+        <article>
+          <h3>Main features</h3>
+          <ul>
+            <li>Dynamic AI report generation with local fallback</li>
+            <li>Saved reports, pinned reports, history, and exports</li>
+            <li>Clerk authentication and account state</li>
+            <li>Stripe Checkout, Billing Portal, and subscription sync</li>
+          </ul>
+        </article>
+      </div>
+
+      <h2>Technology stack</h2>
+      <div class="case-study-tags" aria-label="Technology stack">
+        <span>HTML</span>
+        <span>CSS</span>
+        <span>JavaScript</span>
+        <span>Vercel Functions</span>
+        <span>Clerk</span>
+        <span>Stripe</span>
+        <span>Supabase</span>
+        <span>Gemini API</span>
+      </div>
+
+      <h2>Architecture overview</h2>
+      <p>The frontend is a framework-free web app. API routes handle secure generation, authentication checks, billing actions, Stripe webhooks, Supabase persistence, and provider integration. The browser never receives server-side secrets.</p>
+      <div class="architecture-list">
+        <span>Frontend UI</span>
+        <span>Vercel API routes</span>
+        <span>Clerk auth</span>
+        <span>Gemini provider</span>
+        <span>Supabase data layer</span>
+        <span>Stripe billing</span>
+      </div>
+
+      <h2>Security and production work</h2>
+      <ul>
+        <li>Server-side Clerk token verification for protected API routes.</li>
+        <li>Stripe webhook signature verification using raw request bodies.</li>
+        <li>Server-side usage enforcement for Free and Pro plans.</li>
+        <li>Supabase RLS documentation and service-role-only API access.</li>
+        <li>Content Security Policy and production security headers for Vercel.</li>
+      </ul>
+
+      <h2>Key engineering challenges solved</h2>
+      <ul>
+        <li>Reliable Pro activation across Stripe, Clerk, and Supabase.</li>
+        <li>Billing Portal cancellation sync when Stripe webhooks and dashboard state differ.</li>
+        <li>Automatic billing status refresh after returning from Stripe Portal.</li>
+        <li>Safe report rendering with escaped user-controlled content.</li>
+        <li>Professional report UX without changing the underlying AI provider architecture.</li>
+      </ul>
+
+      <h2>Screenshots</h2>
+      <div class="screenshot-grid">
+        <figure>
+          <div class="screenshot-placeholder">Dashboard / first screen</div>
+          <figcaption>First impression and research workflow entry point.</figcaption>
+        </figure>
+        <figure>
+          <div class="screenshot-placeholder">Generated report</div>
+          <figcaption>Document-style report reading experience.</figcaption>
+        </figure>
+        <figure>
+          <div class="screenshot-placeholder">Billing settings</div>
+          <figcaption>Subscription status and Stripe Billing Portal flow.</figcaption>
+        </figure>
+      </div>
+
+      <h2>Built by Raitis</h2>
+      <p>Full-stack web developer building AI SaaS products, authentication systems, subscriptions, databases, and production-ready interfaces.</p>
+      <p>This project is presented as a portfolio case study. It demonstrates product thinking, frontend polish, backend integration, subscription infrastructure, and production readiness work without claiming real customer traction or revenue.</p>
+    </section>
+  </main>
+
+  <footer class="static-footer">
+    <span>ResearchAI</span>
+    <nav aria-label="Footer">
+      <a href="case-study.html">Case Study</a>
+      <a href="about.html">About</a>
+      <a href="contact.html">Contact</a>
+      <a href="privacy.html">Privacy</a>
+      <a href="terms.html">Terms</a>
+    </nav>
+  </footer>
+</body>
+</html>
